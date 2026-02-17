@@ -1,0 +1,162 @@
+# ══════════════════════════════════════════════════════════════════════
+# HRL-SARP — Micro Agent Configuration (TD3 + HER)
+# References:
+#   - Fujimoto et al., "Addressing Function Approximation Error in Actor-Critic Methods", 2018
+#   - Andrychowicz et al., "Hindsight Experience Replay", 2017
+# ══════════════════════════════════════════════════════════════════════
+
+# ── Agent Identity ───────────────────────────────────────────────────
+agent_name: "MicroAgent_TD3_HER"
+agent_type: "td3"
+update_frequency: "daily"  # Micro agent updates daily at market close
+
+# ── Network Architecture ────────────────────────────────────────────
+network:
+  # Per-stock feature vector dimensionality
+  stock_feature_dim: 22           # 22 features per stock (technical + fundamental)
+
+  # Goal embedding from Macro agent
+  goal_embedding_dim: 64          # Sector weights (11D) + regime (3D) → encoded to 64D
+
+  # Goal-conditioned encoder
+  goal_encoder:
+    input_dim: 14                 # 11 sector weights + 3 regime one-hot
+    hidden_dim: 64
+    output_dim: 64
+    activation: "gelu"
+
+  # Per-stock MLP (processes each stock independently before attention)
+  stock_mlp:
+    # Input: stock_features (22D) + goal_embedding (64D) = 86D
+    hidden_dims: [128, 64]        # Two hidden layers
+    activation: "gelu"
+    use_layer_norm: true
+
+  # Self-attention over stock universe
+  stock_attention:
+    num_heads: 4
+    d_model: 64
+    dropout: 0.1
+    max_stocks: 50                # Maximum stocks in filtered universe
+
+  # Actor head: Linear(64, 1) per stock → Softmax over all stocks
+  actor:
+    output_per_stock: 1           # Weight per stock
+    output_activation: "softmax"  # Portfolio weights sum to 1
+
+  # Twin Critic heads
+  critic:
+    hidden_dims: [256, 128]       # Q-network hidden layers
+    output_dim: 1                 # Q(s, a) scalar
+
+# ── TD3 Hyperparameters ─────────────────────────────────────────────
+td3:
+  lr_actor: 1.0e-3               # Actor learning rate
+  lr_critic: 1.0e-3              # Critic learning rate
+  gamma: 0.99                     # Discount factor
+  tau: 0.005                      # Soft target update coefficient (Polyak averaging)
+  policy_noise: 0.2               # Gaussian noise std for target policy smoothing
+  noise_clip: 0.5                 # Clipping range for target policy noise
+  policy_delay: 2                 # Update actor every N critic updates (delayed policy update)
+  max_grad_norm: 1.0              # Gradient clipping threshold
+
+  # Exploration noise (added to actor output during training)
+  exploration_noise:
+    type: "gaussian"
+    initial_std: 0.3             # Initial exploration noise std
+    final_std: 0.05              # Final exploration noise std (after decay)
+    decay_steps: 100000          # Linear decay over N steps
+
+# ── Hindsight Experience Replay (HER) ───────────────────────────────
+her:
+  enabled: true
+  strategy: "future"              # "final", "future", or "episode"
+  k: 4                            # Number of additional goals to sample per transition
+  # Goal space: achieved sector allocation that matched Macro's recommendation
+  # The "future" strategy samples k goals from future timesteps in the same episode
+  # This dramatically improves sample efficiency when Micro rarely hits exact Macro goal
+  goal_tolerance: 0.1            # Cosine similarity threshold for "goal achieved"
+
+# ── Replay Buffer ───────────────────────────────────────────────────
+replay_buffer:
+  capacity: 1000000               # 1M transitions
+  batch_size: 256                 # Mini-batch size for updates
+  prioritised: false              # Standard uniform sampling (PER optional)
+  # If prioritised is true:
+  per_alpha: 0.6                  # Prioritisation exponent
+  per_beta_start: 0.4            # Importance sampling correction start
+  per_beta_end: 1.0              # IS correction end (annealed)
+  per_beta_frames: 100000        # Annealing period
+
+# ── Optimizer ───────────────────────────────────────────────────────
+optimizer:
+  actor:
+    type: "adam"
+    betas: [0.9, 0.999]
+    eps: 1.0e-8
+    weight_decay: 1.0e-5
+  critic:
+    type: "adam"
+    betas: [0.9, 0.999]
+    eps: 1.0e-8
+    weight_decay: 1.0e-4          # Slightly higher for critic regularisation
+
+# ── Learning Rate Schedule ──────────────────────────────────────────
+lr_schedule:
+  actor:
+    type: "step"
+    step_size: 50000              # Decay LR every N steps
+    gamma_decay: 0.5              # Multiply LR by this factor
+    min_lr: 1.0e-5
+  critic:
+    type: "step"
+    step_size: 50000
+    gamma_decay: 0.5
+    min_lr: 1.0e-5
+
+# ── Reward Weights ──────────────────────────────────────────────────
+reward:
+  # R_total_micro = w1*R_micro + w2*R_portfolio + w3*R_value_bonus
+  w_micro: 0.5                   # Sharpe + goal alignment - drawdown penalty
+  w_portfolio: 0.3               # Calmar * (1 - CVaR) - STT cost
+  w_value_bonus: 0.2             # Value discovery bonus
+
+  # R_micro components
+  sharpe_weight: 0.5             # Weight of weekly Sharpe in R_micro
+  goal_alignment_weight: 0.3     # Weight of goal cosine similarity
+  drawdown_penalty_weight: 0.2   # Weight of drawdown penalty
+  drawdown_threshold: 0.05       # Drawdown threshold before penalty kicks in
+
+# ── Training Settings ──────────────────────────────────────────────
+training:
+  total_timesteps: 1000000        # Total environment steps
+  learning_starts: 10000          # Random exploration steps before learning
+  eval_interval: 5000             # Evaluate every N steps
+  checkpoint_interval: 20000      # Save checkpoint every N steps
+  early_stopping_patience: 30     # Stop if no improvement for N evaluations
+  num_eval_episodes: 10           # Episodes per evaluation
+  warmup_steps: 5000              # Steps with random actions before learning
+
+# ── Pre-training (Phase 2) ──────────────────────────────────────────
+pretrain:
+  enabled: true
+  epochs: 30                      # Supervised pre-training epochs
+  learning_rate: 5.0e-4
+  batch_size: 64
+  validation_split: 0.2
+  label_source: "analyst_consensus"  # Use analyst consensus as weak supervision
+
+# ── Stock Universe Filtering ───────────────────────────────────────
+universe:
+  max_stocks_per_sector: 10       # Top N stocks per sector by market cap
+  min_market_cap_cr: 5000         # Minimum market cap ₹5,000 Cr (large + mid cap)
+  min_avg_volume_cr: 5            # Minimum ₹5 Cr daily average volume
+  exclude_pledge_above: 0.20      # Exclude promoter pledge > 20%
+  index_membership: ["nifty_200"] # Stock universe based on Nifty 200
+
+# ── Logging ─────────────────────────────────────────────────────────
+logging:
+  log_interval: 200               # Log metrics every N steps
+  mlflow_experiment: "micro_agent_td3"
+  tensorboard: true
+  log_dir: "logs/micro_agent"

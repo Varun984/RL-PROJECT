@@ -1,0 +1,111 @@
+# ══════════════════════════════════════════════════════════════════════
+# HRL-SARP — Macro Agent Configuration (PPO)
+# Reference: Schulman et al., "Proximal Policy Optimization Algorithms", 2017
+# ══════════════════════════════════════════════════════════════════════
+
+# ── Agent Identity ───────────────────────────────────────────────────
+agent_name: "MacroAgent_PPO"
+agent_type: "ppo"
+update_frequency: "weekly"  # Macro agent updates every Friday close
+
+# ── Network Architecture ────────────────────────────────────────────
+network:
+  # Macro state vector dimensionality (18 raw macro features)
+  macro_state_dim: 18
+
+  # GNN sector embedding dimensions
+  num_sectors: 11              # NSE 11 Nifty sectors
+  sector_embedding_dim: 64     # Output dim of GCN/GAT per sector node
+
+  # Multi-head attention over sector GNN embeddings
+  attention:
+    num_heads: 4               # Number of attention heads
+    d_model: 64                # Embedding dimension (must be divisible by num_heads)
+    dropout: 0.1               # Attention dropout rate
+
+  # Actor-Critic MLP layers after attention + macro_state concatenation
+  mlp_hidden_dims: [256, 128, 64]  # MLP layer sizes
+  activation: "gelu"               # GELU activation (Hendrycks & Gimpel, 2016)
+  use_layer_norm: true             # LayerNorm before each activation
+
+  # Output heads
+  actor:
+    sector_weight_dim: 11          # Softmax output for 11 sectors
+    regime_classes: 3              # Bull=0, Bear=1, Sideways=2
+  critic:
+    value_dim: 1                   # V(s) scalar output
+
+# ── PPO Hyperparameters ─────────────────────────────────────────────
+ppo:
+  learning_rate: 3.0e-4           # Adam optimizer LR
+  gamma: 0.99                     # Discount factor
+  gae_lambda: 0.95                # GAE(λ) for advantage estimation (Schulman et al., 2016)
+  clip_epsilon: 0.2               # PPO clipping parameter (eq. 7 in Schulman et al., 2017)
+  entropy_coef: 0.01              # Entropy bonus to encourage exploration
+  value_loss_coef: 0.5            # Coefficient for value function loss
+  max_grad_norm: 0.5              # Gradient clipping threshold
+  n_epochs: 10                    # Number of PPO update epochs per data batch
+  batch_size: 64                  # Mini-batch size for PPO updates
+  n_steps: 128                    # Number of steps to collect before update (rollout length)
+  normalize_advantages: true      # Normalize advantages to zero mean, unit variance
+
+# ── Optimizer ───────────────────────────────────────────────────────
+optimizer:
+  type: "adam"
+  betas: [0.9, 0.999]
+  eps: 1.0e-8
+  weight_decay: 1.0e-5            # L2 regularisation
+
+# ── Learning Rate Schedule ──────────────────────────────────────────
+lr_schedule:
+  type: "cosine_annealing"        # Cosine annealing with warm restarts
+  T_max: 500                      # Period of cosine schedule (in update steps)
+  eta_min: 1.0e-6                 # Minimum learning rate
+  warmup_steps: 50                # Linear warmup for first N steps
+
+# ── Regime Classification ───────────────────────────────────────────
+regime:
+  num_classes: 3                  # Bull, Bear, Sideways
+  classification_loss: "cross_entropy"
+  regime_reward_correct: 0.3      # Reward for correct regime prediction
+  regime_reward_incorrect: -0.1   # Penalty for incorrect regime prediction
+  # Regime label generation parameters (for supervised pre-training)
+  bull_threshold: 0.02            # Weekly Nifty return > 2% → Bull
+  bear_threshold: -0.02           # Weekly Nifty return < -2% → Bear
+  # Between thresholds → Sideways
+
+# ── Reward Weights ──────────────────────────────────────────────────
+reward:
+  # R_total_macro = w1*R_macro + w2*R_portfolio + w3*R_regime + w4*R_value_bonus
+  w_macro: 0.4                    # Sector alpha reward weight
+  w_portfolio: 0.3                # Portfolio-level reward weight
+  w_regime: 0.2                   # Regime accuracy reward weight
+  w_value_bonus: 0.1              # Value discovery bonus weight
+
+  # R_macro components
+  herfindahl_penalty_coef: 0.1    # Penalise concentrated sector allocations
+  turnover_penalty_coef: 0.001    # Penalise excessive rebalancing
+
+# ── Training Settings ──────────────────────────────────────────────
+training:
+  total_timesteps: 500000         # Total environment steps for training
+  eval_interval: 5000             # Evaluate every N steps
+  checkpoint_interval: 10000      # Save checkpoint every N steps
+  early_stopping_patience: 20     # Stop if no improvement for N evaluations
+  num_eval_episodes: 10           # Number of episodes for evaluation
+
+# ── Pre-training (Phase 1) ──────────────────────────────────────────
+pretrain:
+  enabled: true
+  epochs: 50                      # Supervised pre-training epochs
+  learning_rate: 1.0e-3           # Higher LR for faster supervised convergence
+  batch_size: 32
+  validation_split: 0.2
+  label_source: "sector_winner"   # Use best-performing sector as label
+
+# ── Logging ─────────────────────────────────────────────────────────
+logging:
+  log_interval: 100               # Log metrics every N steps
+  mlflow_experiment: "macro_agent_ppo"
+  tensorboard: true
+  log_dir: "logs/macro_agent"

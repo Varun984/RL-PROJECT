@@ -1,0 +1,207 @@
+# ══════════════════════════════════════════════════════════════════════
+# HRL-SARP — Risk Management Configuration
+# All risk limits, SEBI constraints, India-specific rules, and event dates
+# ══════════════════════════════════════════════════════════════════════
+
+# ── Portfolio-Level Risk Limits ─────────────────────────────────────
+portfolio:
+  max_drawdown_pct: 0.07          # Circuit breaker: flatten to cash at -7% drawdown
+  max_drawdown_recovery_pct: 0.03 # Re-enter after drawdown recovers to -3%
+  max_leverage: 1.0               # No leverage (fully funded, long-only)
+  min_cash_pct: 0.02              # Always keep 2% in cash for liquidity
+  max_positions: 30               # Maximum number of simultaneous positions
+  min_positions: 5                # Minimum diversification requirement
+  rebalance_threshold: 0.05       # Only rebalance if weight drift > 5% from target
+
+# ── Sector Concentration Limits ─────────────────────────────────────
+sector:
+  max_single_sector_pct: 0.35     # No single sector > 35% of portfolio
+  min_single_sector_pct: 0.02     # Minimum 2% if allocated (avoid dust positions)
+  max_correlated_sectors_pct: 0.50  # Max 50% in highly correlated sector group
+  # Correlation threshold for "highly correlated" grouping
+  correlation_threshold: 0.7
+
+# ── Individual Stock Limits ─────────────────────────────────────────
+stock:
+  max_single_stock_pct: 0.10      # No single stock > 10% of portfolio
+  min_single_stock_pct: 0.005     # Minimum 0.5% if held (avoid dust)
+
+# ── Liquidity Filters ──────────────────────────────────────────────
+liquidity:
+  min_daily_volume_cr: 5.0        # Minimum ₹5 Cr average daily traded value
+  min_delivery_pct: 0.30          # Minimum 30% delivery volume (avoid speculative stocks)
+  volume_lookback_days: 20        # Compute average over last 20 trading days
+  max_adv_participation: 0.05     # Max 5% of average daily volume per trade (market impact)
+
+# ── Governance Filters ─────────────────────────────────────────────
+governance:
+  max_promoter_pledge_pct: 0.20   # Exclude stocks with > 20% promoter pledge
+  min_free_float_pct: 0.15        # Minimum 15% free float
+  exclude_asm_stocks: true        # Exclude Additional Surveillance Measure (ASM) stocks
+  exclude_gsm_stocks: true        # Exclude Graded Surveillance Measure (GSM) stocks
+  min_listing_days: 180           # Minimum 180 days since listing (avoid IPO volatility)
+
+# ── CVaR Position Sizing ───────────────────────────────────────────
+cvar:
+  confidence_level: 0.95          # 95% CVaR
+  lookback_days: 252              # 1 year of daily returns for CVaR estimation
+  max_cvar_contribution: 0.15     # No single position contributes > 15% of portfolio CVaR
+  risk_budget_method: "equal_risk"  # "equal_risk" or "proportional"
+  monte_carlo_simulations: 10000  # Number of MC simulations for CVaR estimation
+  use_parametric: true            # Use parametric CVaR (faster) vs MC
+
+# ── Transaction Cost Model (India-Specific) ─────────────────────────
+transaction_costs:
+  # Securities Transaction Tax (STT)
+  stt:
+    delivery_buy: 0.001           # 0.1% on buy value (delivery)
+    delivery_sell: 0.001          # 0.1% on sell value (delivery)
+    intraday_sell: 0.00025        # 0.025% on sell value (intraday)
+    fno_sell: 0.000125            # 0.0125% on sell value (F&O)
+
+  # Brokerage (discount broker model)
+  brokerage:
+    delivery: 0.0                 # Zero brokerage on delivery (Zerodha model)
+    intraday: 0.0003              # 0.03% or ₹20 per order, whichever is lower
+    intraday_max_per_order: 20.0  # ₹20 cap per order
+
+  # Exchange charges
+  exchange:
+    nse_turnover_charge: 0.0000325  # NSE transaction charge
+    bse_turnover_charge: 0.0000375  # BSE transaction charge
+
+  # SEBI turnover fee
+  sebi_fee: 0.000001              # ₹10 per crore = 0.0001%
+
+  # GST (on brokerage + exchange charges)
+  gst_rate: 0.18                  # 18% GST
+
+  # Stamp duty (state-specific, using Maharashtra rates)
+  stamp_duty:
+    buy: 0.00015                  # 0.015% on buy value
+    sell: 0.0                     # No stamp duty on sell
+
+  # Slippage model
+  slippage:
+    base_bps: 5                   # Base slippage in basis points
+    volume_impact_factor: 0.1     # Additional slippage per % of ADV traded
+
+# ── Event Risk Management ──────────────────────────────────────────
+events:
+  # Position size reduction factor during event risk periods
+  event_risk_reduction: 0.50      # Reduce position sizes by 50% pre-event
+
+  # Days before event to trigger risk reduction
+  event_lookforward_days: 3       # Start reducing 3 days before event
+
+  # Major event categories
+  categories:
+    rbi_mpc:
+      description: "RBI Monetary Policy Committee decisions"
+      risk_level: "high"
+      # Dates updated semi-annually (2024-2025 schedule)
+      dates:
+        - "2024-02-08"
+        - "2024-04-05"
+        - "2024-06-07"
+        - "2024-08-08"
+        - "2024-10-09"
+        - "2024-12-06"
+        - "2025-02-07"
+        - "2025-04-09"
+        - "2025-06-06"
+        - "2025-08-08"
+        - "2025-10-08"
+        - "2025-12-05"
+
+    union_budget:
+      description: "Annual Union Budget presentation"
+      risk_level: "critical"
+      dates:
+        - "2024-02-01"
+        - "2024-07-23"            # Full budget after elections
+        - "2025-02-01"
+
+    election_results:
+      description: "General / state election result dates"
+      risk_level: "critical"
+      dates:
+        - "2024-06-04"            # Lok Sabha 2024 results
+
+    fno_expiry:
+      description: "Monthly F&O expiry (last Thursday of month)"
+      risk_level: "medium"
+      # Dynamically computed by india_calendar.py
+
+    results_season:
+      description: "Quarterly earnings season"
+      risk_level: "medium"
+      periods:
+        - start: "2024-01-10"
+          end: "2024-02-20"
+        - start: "2024-04-10"
+          end: "2024-05-20"
+        - start: "2024-07-10"
+          end: "2024-08-20"
+        - start: "2024-10-10"
+          end: "2024-11-20"
+        - start: "2025-01-10"
+          end: "2025-02-20"
+        - start: "2025-04-10"
+          end: "2025-05-20"
+
+    us_fed:
+      description: "US Federal Reserve FOMC decisions (global impact)"
+      risk_level: "medium"
+      dates:
+        - "2024-01-31"
+        - "2024-03-20"
+        - "2024-05-01"
+        - "2024-06-12"
+        - "2024-07-31"
+        - "2024-09-18"
+        - "2024-11-07"
+        - "2024-12-18"
+        - "2025-01-29"
+        - "2025-03-19"
+        - "2025-05-07"
+        - "2025-06-18"
+
+# ── Stress Test Scenarios ──────────────────────────────────────────
+stress_tests:
+  covid_crash:
+    description: "COVID-19 market crash"
+    start_date: "2020-02-20"
+    end_date: "2020-04-30"
+    expected_behaviour: "Max drawdown gate should trigger; move to cash"
+
+  rate_hike_2022:
+    description: "RBI/Fed rate hike cycle impact"
+    start_date: "2022-04-01"
+    end_date: "2022-12-31"
+    expected_behaviour: "Shift towards defensive sectors; reduce duration"
+
+  ilfs_crisis:
+    description: "IL&FS credit crisis"
+    start_date: "2018-09-01"
+    end_date: "2019-03-31"
+    expected_behaviour: "Avoid financials; increase quality tilt"
+
+  demonetisation:
+    description: "November 2016 demonetisation"
+    start_date: "2016-11-01"
+    end_date: "2017-03-31"
+    expected_behaviour: "Sector rotation to digital payments, banking"
+
+# ── Circuit Breaker Rules (NSE) ────────────────────────────────────
+circuit_breakers:
+  # Index-level circuit breakers (SEBI rules)
+  index:
+    level_1: 0.10                 # 10% decline from previous close
+    level_2: 0.15                 # 15% decline
+    level_3: 0.20                 # 20% decline — trading halted for day
+  # Stock-level circuit limits
+  stock:
+    upper_circuit: 0.20           # 20% upper circuit (varies by stock)
+    lower_circuit: 0.20           # 20% lower circuit
+    # Note: Actual limits are 2%, 5%, 10%, or 20% depending on stock category

@@ -1,0 +1,249 @@
+# ══════════════════════════════════════════════════════════════════════
+# HRL-SARP — Data Sources & Feature Configuration
+# All data sources, API credentials, feature lists, and date ranges
+# ══════════════════════════════════════════════════════════════════════
+
+# ── Date Ranges ─────────────────────────────────────────────────────
+dates:
+  train_start: "2015-01-01"       # Training data start (covers multiple market cycles)
+  train_end: "2022-12-31"         # Training data end
+  val_start: "2023-01-01"         # Validation period start
+  val_end: "2023-12-31"           # Validation period end
+  test_start: "2024-01-01"        # Out-of-sample test period start
+  test_end: "2025-06-30"          # Test period end
+  lookback_days: 252              # ~1 year of trading days for feature computation
+
+# ── Market Data Sources ─────────────────────────────────────────────
+market_data:
+  primary_source: "yfinance"      # Primary: yfinance (free, reliable for historical)
+  fallback_source: "jugaad_data"  # Fallback: jugaad-data (NSE direct)
+
+  # Zerodha Kite API (for live/recent data & F&O chain)
+  kite_api:
+    api_key: "${KITE_API_KEY}"          # Set via environment variable
+    api_secret: "${KITE_API_SECRET}"
+    access_token: "${KITE_ACCESS_TOKEN}"
+    enabled: false                       # Set to true when Kite credentials available
+
+  # OHLCV data parameters
+  ohlcv:
+    interval: "1d"                # Daily candles
+    adjust_splits: true           # Auto-adjust for splits and bonuses
+    include_delivery: true        # Fetch delivery volume data from NSE
+
+  # F&O data
+  fno:
+    fetch_option_chain: true
+    expiry_type: "monthly"       # Focus on monthly expiry
+    index_options: ["NIFTY", "BANKNIFTY"]
+    stock_options_top_n: 20      # Top 20 F&O stocks by OI
+
+  # Index data to fetch
+  indices:
+    - symbol: "^NSEI"
+      name: "Nifty 50"
+    - symbol: "^NSEBANK"
+      name: "Bank Nifty"
+    - symbol: "^CNXIT"
+      name: "Nifty IT"
+    - symbol: "NIFTY_FIN_SERVICE.NS"
+      name: "Nifty Financial Services"
+    - symbol: "^CNXAUTO"
+      name: "Nifty Auto"
+    - symbol: "^CNXPHARMA"
+      name: "Nifty Pharma"
+    - symbol: "^CNXFMCG"
+      name: "Nifty FMCG"
+    - symbol: "^CNXENERGY"
+      name: "Nifty Energy"
+    - symbol: "^CNXMETAL"
+      name: "Nifty Metal"
+    - symbol: "^CNXREALTY"
+      name: "Nifty Realty"
+    - symbol: "^CNXMEDIA"
+      name: "Nifty Media"
+    - symbol: "^CNXINFRA"
+      name: "Nifty Infra"
+
+# ── Fundamental Data Sources ────────────────────────────────────────
+fundamentals:
+  primary_source: "screener"      # Screener.in (scraper-based)
+
+  screener:
+    base_url: "https://www.screener.in"
+    rate_limit_seconds: 2         # Respect rate limits
+    export_format: "csv"          # Screener CSV export format
+
+  trendlyne:
+    base_url: "https://trendlyne.com"
+    api_key: "${TRENDLYNE_API_KEY}"
+    enabled: false
+
+  # Fundamental metrics to fetch
+  metrics:
+    - "pe_ratio"                  # Price-to-Earnings ratio
+    - "pb_ratio"                  # Price-to-Book ratio
+    - "roe"                       # Return on Equity
+    - "roce"                      # Return on Capital Employed
+    - "debt_to_equity"            # Debt-to-Equity ratio
+    - "ev_ebitda"                 # Enterprise Value / EBITDA
+    - "promoter_pledge_pct"       # Promoter pledge percentage
+    - "earnings_growth_yoy"       # Year-over-year earnings growth
+    - "revenue_growth_yoy"        # Year-over-year revenue growth
+    - "free_cash_flow"            # Free cash flow
+    - "dividend_yield"            # Dividend yield
+    - "current_ratio"             # Current ratio (liquidity)
+
+# ── News & Sentiment Sources ───────────────────────────────────────
+news:
+  sources:
+    - name: "Economic Times"
+      type: "rss"
+      url: "https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms"
+      category: "markets"
+
+    - name: "Moneycontrol"
+      type: "rss"
+      url: "https://www.moneycontrol.com/rss/marketreports.xml"
+      category: "markets"
+
+    - name: "BSE Announcements"
+      type: "api"
+      url: "https://api.bseindia.com/BseIndiaAPI/api/AnnGetData/w"
+      category: "corporate"
+
+    - name: "LiveMint Markets"
+      type: "rss"
+      url: "https://www.livemint.com/rss/markets"
+      category: "markets"
+
+  # Scraping parameters
+  scraping:
+    max_articles_per_source: 100  # Max articles per scrape cycle
+    lookback_hours: 168           # 1 week of news lookback
+    rate_limit_seconds: 3         # Respect rate limits
+    user_agent: "HRL-SARP-Research/1.0"
+
+# ── Macroeconomic Data Sources ──────────────────────────────────────
+macro:
+  # India VIX (volatility index)
+  india_vix:
+    source: "yfinance"
+    symbol: "^INDIAVIX"
+
+  # FII/DII flow data
+  fii_dii:
+    source: "nsdl"
+    url: "https://www.fpi.nsdl.co.in/web/StaticReports/Fortnightly/FPIFortnightlyReport.html"
+    # Alternative: CDSL, Moneycontrol aggregated
+    fallback_url: "https://www.moneycontrol.com/stocks/marketstats/fii_dii_activity/index.php"
+
+  # RBI monetary policy
+  rbi:
+    repo_rate_url: "https://www.rbi.org.in/scripts/BS_ViewBulletin.aspx"
+    policy_dates_file: "config/rbi_mpc_dates.json"
+
+  # Currency
+  usd_inr:
+    source: "yfinance"
+    symbol: "INR=X"
+
+  # Crude Oil (Brent)
+  crude_oil:
+    source: "yfinance"
+    symbol: "BZ=F"
+
+  # US 10-Year Treasury (global risk proxy)
+  us_10y:
+    source: "yfinance"
+    symbol: "^TNX"
+
+# ── Feature Lists ──────────────────────────────────────────────────
+features:
+  # Macro state vector components (18D)
+  macro_state:
+    - "india_vix"                 # India VIX level
+    - "india_vix_change_1w"       # VIX weekly change
+    - "fii_flow_norm"             # FII net flow (normalised)
+    - "dii_flow_norm"             # DII net flow (normalised)
+    - "pcr_index"                 # Put-Call Ratio (Nifty)
+    - "usd_inr_momentum"          # USD/INR 20D momentum
+    - "crude_regime"              # Crude oil regime encoding
+    - "rbi_rate"                  # Current repo rate
+    - "credit_spread"             # Corporate bond spread
+    - "yield_curve_slope"         # 10Y-2Y yield spread
+    - "nifty_return_4w"           # Nifty 50 trailing 4-week return
+    - "nifty_volatility_4w"       # Nifty 50 trailing 4-week volatility
+    - "breadth_advance_decline"   # Advance-decline ratio
+    - "fno_oi_change"             # F&O open interest weekly change
+    - "event_risk_flag"           # Binary: upcoming event within 5 days
+    - "days_to_next_event"        # Days until next major event
+    - "regime_label_prev"         # Previous week's regime classification
+    - "portfolio_drawdown"        # Current portfolio drawdown from peak
+
+  # Per-stock feature vector components (22D)
+  stock_features:
+    - "return_1d"                 # 1-day return
+    - "return_5d"                 # 5-day return
+    - "return_20d"                # 20-day return
+    - "volatility_20d"            # 20-day rolling volatility
+    - "rsi_14"                    # RSI (14-period)
+    - "macd_signal"               # MACD - Signal line
+    - "bb_position"               # Bollinger Band position (0–1)
+    - "volume_ratio_20d"          # Volume / 20D avg volume
+    - "delivery_pct"              # Delivery volume percentage
+    - "pe_zscore"                 # P/E z-score vs sector median
+    - "pb_zscore"                 # P/B z-score vs sector median
+    - "roe"                       # Return on Equity
+    - "roce"                      # Return on Capital Employed
+    - "debt_to_equity"            # Debt-to-Equity ratio
+    - "ev_ebitda_zscore"          # EV/EBITDA z-score vs sector
+    - "earnings_surprise"         # Earnings surprise percentage
+    - "promoter_pledge_pct"       # Promoter pledge percentage
+    - "sector_relative_strength"  # Stock return vs sector return
+    - "market_cap_log"            # Log market capitalisation
+    - "free_float_pct"            # Free float percentage
+    - "fii_holding_change"        # FII holding change (quarterly)
+    - "avg_analyst_rating"        # Average analyst rating (1–5)
+
+# ── NSE Sector Mapping ─────────────────────────────────────────────
+sectors:
+  mapping:
+    IT: ["TCS", "INFY", "WIPRO", "HCLTECH", "TECHM", "LTIM", "MPHASIS", "COFORGE", "PERSISTENT", "LTTS"]
+    Financials: ["HDFCBANK", "ICICIBANK", "KOTAKBANK", "SBIN", "AXISBANK", "BAJFINANCE", "BAJAJFINSV", "HDFCLIFE", "SBILIFE", "ICICIGI"]
+    Auto: ["MARUTI", "TATAMOTORS", "M&M", "BAJAJ-AUTO", "HEROMOTOCO", "EICHERMOT", "ASHOKLEY", "BHARATFORG", "MOTHERSON", "BALKRISIND"]
+    Pharma: ["SUNPHARMA", "DRREDDY", "CIPLA", "DIVISLAB", "APOLLOHOSP", "BIOCON", "TORNTPHARM", "LUPIN", "ALKEM", "AUROPHARMA"]
+    FMCG: ["HINDUNILVR", "ITC", "NESTLEIND", "BRITANNIA", "DABUR", "MARICO", "COLPAL", "GODREJCP", "TATACONSUM", "UBL"]
+    Energy: ["RELIANCE", "ONGC", "BPCL", "IOC", "NTPC", "POWERGRID", "ADANIGREEN", "TATAPOWER", "GAIL", "PETRONET"]
+    Metals: ["TATASTEEL", "HINDALCO", "JSWSTEEL", "VEDL", "COALINDIA", "NMDC", "SAIL", "NATIONALUM", "HINDZINC", "MOIL"]
+    Realty: ["DLF", "GODREJPROP", "OBEROIRLTY", "PHOENIXLTD", "PRESTIGE", "BRIGADE", "SOBHA", "SUNTECK", "LODHA", "MAHLIFE"]
+    Media: ["ZEEL", "SUNTV", "PVR", "NETWORK18", "TV18BRDCST", "NAZARA", "SAREGAMA", "TIPS", "TVTODAY", "NDTV"]
+    Telecom: ["BHARTIARTL", "IDEA", "TATACOMM", "RAILTEL", "HFCL", "STERLITE", "TEJAS", "ROUTE", "GTPL", "DEN"]
+    Infra: ["LARSENTOUB", "ADANIPORTS", "ULTRACEMCO", "AMBUJACEM", "SHREECEM", "IRCON", "NBCC", "NCC", "KNR", "PNC"]
+
+# ── Feature Store Configuration ─────────────────────────────────────
+feature_store:
+  backend: "sqlite"               # "sqlite" or "timescaledb"
+  sqlite:
+    db_path: "data/feature_store.db"
+  timescaledb:
+    host: "${TSDB_HOST}"
+    port: 5432
+    database: "hrl_sarp"
+    user: "${TSDB_USER}"
+    password: "${TSDB_PASSWORD}"
+  # Timestamp gating: prevent lookahead bias
+  # Features are only available T+1 (next trading day)
+  lookahead_guard: true
+  point_in_time_join: true        # Always use point-in-time joins
+
+# ── Data Pipeline Settings ──────────────────────────────────────────
+pipeline:
+  scheduler: "simple"             # "simple" (Python schedule) or "airflow"
+  fetch_interval_minutes: 30      # Data refresh interval during market hours
+  market_hours:
+    open: "09:15"                 # NSE market open (IST)
+    close: "15:30"                # NSE market close (IST)
+    pre_open: "09:00"             # Pre-open session
+  retry_max_attempts: 3           # Max retries on fetch failure
+  retry_delay_seconds: 60        # Delay between retries
