@@ -106,7 +106,7 @@ def run_training(args: argparse.Namespace) -> None:
             func(configs, device=device, seed=seed)
             logger.info("✅ %s completed successfully", name)
         except Exception as e:
-            logger.error("❌ %s failed: %s", name, str(e), exc_info=True)
+            logger.error("Phase failed: %s - %s", name, str(e), exc_info=True)
             if not args.continue_on_error:
                 raise
 
@@ -240,6 +240,60 @@ def run_stress_test(args: argparse.Namespace) -> None:
 
 
 # ══════════════════════════════════════════════════════════════════════
+# DATA COLLECTION
+# ══════════════════════════════════════════════════════════════════════
+
+
+def run_data_collection(args):
+    """Run data collection pipeline."""
+    import subprocess
+    
+    logger.info("=" * 70)
+    logger.info("HRL-SARP DATA COLLECTION")
+    logger.info("=" * 70)
+    
+    cmd = [
+        sys.executable,
+        os.path.join(PROJECT_ROOT, "scripts", "collect_data.py"),
+        "--start", args.start,
+        "--end", args.end,
+        "--output-dir", args.output_dir,
+    ]
+    
+    if args.skip_market:
+        cmd.append("--skip-market")
+    if args.skip_macro:
+        cmd.append("--skip-macro")
+    if args.skip_fundamentals:
+        cmd.append("--skip-fundamentals")
+    if args.skip_news:
+        cmd.append("--skip-news")
+    
+    result = subprocess.run(cmd)
+    sys.exit(result.returncode)
+
+
+def run_demo_generation(args):
+    """Generate demo data."""
+    import subprocess
+    
+    logger.info("=" * 70)
+    logger.info("GENERATING DEMO DATA")
+    logger.info("=" * 70)
+    
+    cmd = [
+        sys.executable,
+        os.path.join(PROJECT_ROOT, "scripts", "generate_demo_data.py"),
+        "--start", args.start,
+        "--end", args.end,
+        "--output-dir", args.output_dir,
+    ]
+    
+    result = subprocess.run(cmd)
+    sys.exit(result.returncode)
+
+
+# ══════════════════════════════════════════════════════════════════════
 # CLI DEFINITION
 # ══════════════════════════════════════════════════════════════════════
 
@@ -294,6 +348,22 @@ Examples:
     dash_parser = subparsers.add_parser("dashboard", help="Launch monitoring dashboard")
     dash_parser.add_argument("--port", type=int, default=8501)
 
+    # Data collection
+    data_parser = subparsers.add_parser("collect-data", help="Collect historical data")
+    data_parser.add_argument("--start", type=str, required=True, help="Start date (YYYY-MM-DD)")
+    data_parser.add_argument("--end", type=str, required=True, help="End date (YYYY-MM-DD)")
+    data_parser.add_argument("--output-dir", type=str, default="data/raw")
+    data_parser.add_argument("--skip-market", action="store_true")
+    data_parser.add_argument("--skip-macro", action="store_true")
+    data_parser.add_argument("--skip-fundamentals", action="store_true")
+    data_parser.add_argument("--skip-news", action="store_true")
+
+    # Generate demo data
+    demo_parser = subparsers.add_parser("generate-demo", help="Generate synthetic demo data")
+    demo_parser.add_argument("--start", type=str, default="2020-01-01")
+    demo_parser.add_argument("--end", type=str, default="2023-12-31")
+    demo_parser.add_argument("--output-dir", type=str, default="data/raw")
+
     return parser
 
 
@@ -320,6 +390,8 @@ def main() -> None:
         "evaluate": run_evaluation,
         "stress-test": run_stress_test,
         "dashboard": run_dashboard,
+        "collect-data": run_data_collection,
+        "generate-demo": run_demo_generation,
     }
 
     handler = commands.get(args.command)

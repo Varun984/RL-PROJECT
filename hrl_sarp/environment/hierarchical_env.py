@@ -266,12 +266,28 @@ class HierarchicalEnv(gym.Env):
     def _extract_goal_from_macro_action(self, macro_action: np.ndarray) -> np.ndarray:
         """Convert raw macro action to goal embedding (14D: 11 sector + 3 regime)."""
         num_sectors = self.macro_env.num_sectors
-        sector_logits = macro_action[:num_sectors]
-        regime_logits = macro_action[num_sectors:]
+        sector_signal = macro_action[:num_sectors]
+        regime_signal = macro_action[num_sectors:]
 
-        # Softmax for proper probability vectors
-        sector_weights = _softmax(sector_logits)
-        regime_probs = _softmax(regime_logits)
+        # If actor already provides probability/simplex vectors, keep them.
+        # Otherwise, interpret as logits and apply softmax.
+        if (
+            np.all(np.isfinite(sector_signal))
+            and np.all(sector_signal >= 0.0)
+            and np.isclose(np.sum(sector_signal), 1.0, atol=1e-3)
+        ):
+            sector_weights = sector_signal.astype(np.float32, copy=True)
+        else:
+            sector_weights = _softmax(sector_signal)
+
+        if (
+            np.all(np.isfinite(regime_signal))
+            and np.all(regime_signal >= 0.0)
+            and np.isclose(np.sum(regime_signal), 1.0, atol=1e-3)
+        ):
+            regime_probs = regime_signal.astype(np.float32, copy=True)
+        else:
+            regime_probs = _softmax(regime_signal)
 
         return np.concatenate([sector_weights, regime_probs]).astype(np.float32)
 

@@ -57,22 +57,75 @@ def pretrain_micro(
     
     logger.info("Initializing Micro agent for pre-training...")
     
-    # TODO: Initialize MicroAgent with configs
-    # TODO: Load and prepare training data
-    # TODO: Call _pretrain_micro_impl with agent and data
+    # Import data loader
+    from data.training_data_loader import TrainingDataLoader
     
-    logger.warning("⚠️  pretrain_micro is not fully implemented yet.")
-    logger.warning("    You need to:")
-    logger.warning("    1. Initialize MicroAgent from configs")
-    logger.warning("    2. Load historical stock data for pre-training")
-    logger.warning("    3. Call _pretrain_micro_impl with prepared data")
+    # Initialize MicroAgent
+    micro_config = configs.get("micro_agent_config", {})
+    max_stocks = micro_config.get("environment", {}).get("max_stocks", 50)
     
-    return {
-        "best_loss": 0.0,
-        "best_checkpoint": "checkpoints/pretrain_micro_best.pt",
-        "epochs_trained": 0,
-        "status": "not_implemented",
+    micro_agent = MicroAgent(
+        config_path="config/micro_agent_config.yaml",
+        device=device,
+    )
+    logger.info("✓ MicroAgent initialized")
+    
+    # Load training data
+    data_config = configs.get("data_config", {})
+    dates = data_config.get("dates", {})
+    train_start = dates.get("train_start", "2015-01-01")
+    train_end = dates.get("train_end", "2022-12-31")
+    val_start = dates.get("val_start", "2023-01-01")
+    val_end = dates.get("val_end", "2023-12-31")
+    
+    loader = TrainingDataLoader(config_path="config/data_config.yaml")
+    
+    logger.info("Loading training data: %s to %s", train_start, train_end)
+    train_data_raw = loader.load_micro_training_data(train_start, train_end, max_stocks)
+    
+    # Prepare data with random goals for pre-training
+    N = len(train_data_raw["stock_returns"])
+    random_goals = np.random.randn(N, 14).astype(np.float32)
+    random_goals[:, :11] = np.abs(random_goals[:, :11])  # Sector weights positive
+    random_goals[:, :11] /= random_goals[:, :11].sum(axis=1, keepdims=True) + 1e-8
+    
+    train_data = {
+        "stock_features": train_data_raw["stock_features"],
+        "stock_returns": train_data_raw["stock_returns"],
+        "goals": random_goals,
+        "masks": train_data_raw["stock_masks"],
     }
+    logger.info("✓ Training data loaded: %d samples", N)
+    
+    logger.info("Loading validation data: %s to %s", val_start, val_end)
+    val_data_raw = loader.load_micro_training_data(val_start, val_end, max_stocks)
+    
+    N_val = len(val_data_raw["stock_returns"])
+    random_goals_val = np.random.randn(N_val, 14).astype(np.float32)
+    random_goals_val[:, :11] = np.abs(random_goals_val[:, :11])
+    random_goals_val[:, :11] /= random_goals_val[:, :11].sum(axis=1, keepdims=True) + 1e-8
+    
+    val_data = {
+        "stock_features": val_data_raw["stock_features"],
+        "stock_returns": val_data_raw["stock_returns"],
+        "goals": random_goals_val,
+        "masks": val_data_raw["stock_masks"],
+    }
+    logger.info("✓ Validation data loaded: %d samples", N_val)
+    
+    # Call actual pre-training implementation
+    logger.info("Starting supervised pre-training...")
+    result = _pretrain_micro_impl(
+        micro_agent=micro_agent,
+        train_data=train_data,
+        val_data=val_data,
+        config_path="config/micro_agent_config.yaml",
+        log_dir="logs/pretrain_micro",
+        seed=seed,
+    )
+    
+    logger.info("✓ Micro pre-training complete: best_loss=%.6f", result["best_loss"])
+    return result
 
 
 def _pretrain_micro_impl(

@@ -105,7 +105,7 @@ def setup_logging(
     root_logger.addHandler(file_handler)
     root_logger.addHandler(console_handler)
 
-    root_logger.info("Logging initialised → %s", log_file)
+    root_logger.info("Logging initialised -> %s", log_file)
 
     return root_logger
 

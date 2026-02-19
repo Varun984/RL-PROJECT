@@ -101,6 +101,7 @@ class MacroEnv(BasePortfolioEnv):
 
         # Sector weights tracking
         self.sector_weights = np.ones(self.num_sectors, dtype=np.float32) / self.num_sectors
+        self.last_predicted_regime = 2
 
         logger.info(
             "MacroEnv initialised | obs_dim=%d | action_dim=%d | max_steps=%d",
@@ -127,12 +128,21 @@ class MacroEnv(BasePortfolioEnv):
     def step(
         self, action: np.ndarray
     ) -> Tuple[np.ndarray, float, bool, bool, Dict[str, Any]]:
-        # Parse action: first 11 dims = sector logits, last 3 = regime logits
-        sector_logits = action[: self.num_sectors]
+        # Parse action: first 11 dims = sector allocation signal, last 3 = regime signal
+        # MacroActor emits sampled sector weights on simplex (Dirichlet). If the signal
+        # is already a valid weight vector, use it directly. Otherwise, fall back to softmax.
+        sector_signal = action[: self.num_sectors]
         regime_logits = action[self.num_sectors:]
 
-        # Convert to weights via softmax
-        new_sector_weights = self.softmax_weights(sector_logits)
+        is_valid_simplex = (
+            np.all(np.isfinite(sector_signal))
+            and np.all(sector_signal >= 0.0)
+            and np.isclose(np.sum(sector_signal), 1.0, atol=1e-3)
+        )
+        if is_valid_simplex:
+            new_sector_weights = sector_signal.astype(np.float32, copy=True)
+        else:
+            new_sector_weights = self.softmax_weights(sector_signal)
 
         # Sector concentration cap
         max_sector_pct = self.risk_cfg["sector"]["max_single_sector_pct"]
@@ -140,6 +150,7 @@ class MacroEnv(BasePortfolioEnv):
 
         # Regime prediction (argmax)
         predicted_regime = int(np.argmax(regime_logits))
+        self.last_predicted_regime = predicted_regime
 
         # Get market data for this step
         sector_returns = self.sector_returns_data[self.current_step]
@@ -227,8 +238,7 @@ class MacroEnv(BasePortfolioEnv):
     def get_goal_for_micro(self) -> Dict[str, Any]:
         """Package current macro output as goal embedding for the Micro agent."""
         regime_one_hot = np.zeros(3, dtype=np.float32)
-        # Use last predicted regime
-        regime_one_hot[int(np.argmax(self.sector_weights[:3]))] = 1.0
+        regime_one_hot[self.last_predicted_regime] = 1.0
 
         return {
             "sector_weights": self.sector_weights.copy(),

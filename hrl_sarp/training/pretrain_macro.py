@@ -56,22 +56,48 @@ def pretrain_macro(
     
     logger.info("Initializing Macro agent for pre-training...")
     
-    # TODO: Initialize MacroAgent with configs
-    # TODO: Load and prepare training data
-    # TODO: Call _pretrain_macro_impl with agent and data
+    # Import data loader
+    from data.training_data_loader import TrainingDataLoader
     
-    logger.warning("⚠️  pretrain_macro is not fully implemented yet.")
-    logger.warning("    You need to:")
-    logger.warning("    1. Initialize MacroAgent from configs")
-    logger.warning("    2. Load historical data for pre-training")
-    logger.warning("    3. Call _pretrain_macro_impl with prepared data")
+    # Initialize MacroAgent
+    macro_config = configs.get("macro_agent_config", {})
+    macro_agent = MacroAgent(
+        config_path="config/macro_agent_config.yaml",
+        device=device,
+    )
+    logger.info("✓ MacroAgent initialized")
     
-    return {
-        "best_loss": 0.0,
-        "best_checkpoint": "checkpoints/pretrain_macro_best.pt",
-        "epochs_trained": 0,
-        "status": "not_implemented",
-    }
+    # Load training data
+    data_config = configs.get("data_config", {})
+    dates = data_config.get("dates", {})
+    train_start = dates.get("train_start", "2015-01-01")
+    train_end = dates.get("train_end", "2022-12-31")
+    val_start = dates.get("val_start", "2023-01-01")
+    val_end = dates.get("val_end", "2023-12-31")
+    
+    loader = TrainingDataLoader(config_path="config/data_config.yaml")
+    
+    logger.info("Loading training data: %s to %s", train_start, train_end)
+    train_data = loader.load_macro_training_data(train_start, train_end)
+    logger.info("✓ Training data loaded: %d samples", len(train_data["macro_states"]))
+    
+    logger.info("Loading validation data: %s to %s", val_start, val_end)
+    val_data = loader.load_macro_training_data(val_start, val_end)
+    logger.info("✓ Validation data loaded: %d samples", len(val_data["macro_states"]))
+    
+    # Call actual pre-training implementation
+    logger.info("Starting supervised pre-training...")
+    result = _pretrain_macro_impl(
+        macro_agent=macro_agent,
+        train_data=train_data,
+        val_data=val_data,
+        config_path="config/macro_agent_config.yaml",
+        log_dir="logs/pretrain_macro",
+        seed=seed,
+    )
+    
+    logger.info("✓ Macro pre-training complete: best_loss=%.4f", result["best_loss"])
+    return result
 
 
 def _pretrain_macro_impl(

@@ -1,4 +1,4 @@
-﻿"""
+"""
 File: base_env.py
 Module: environment
 Description: Abstract base Gymnasium environment providing shared utilities for
@@ -229,7 +229,8 @@ class BasePortfolioEnv(gym.Env, ABC):
         if len(self.return_history) < 2:
             return 0.0
         cum_return = np.prod(1.0 + np.array(self.return_history[-window:])) - 1.0
-        max_dd = max(self.current_drawdown, 1e-8)
+        # Use min 1% drawdown to prevent reward explosion when DD is near zero
+        max_dd = max(self.current_drawdown, 0.01)
         return float(cum_return / max_dd)
 
     def get_sortino(self, window: int = 52, annualise_factor: float = np.sqrt(52)) -> float:

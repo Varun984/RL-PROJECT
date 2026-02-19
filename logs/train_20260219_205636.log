@@ -1,0 +1,26 @@
+2026-02-19 20:56:36 | INFO    | root                      | Logging initialised -> logs\train_20260219_205636.log
+2026-02-19 20:56:36 | INFO    | __main__                  | Loaded config: macro_agent_config
+2026-02-19 20:56:36 | INFO    | __main__                  | Loaded config: micro_agent_config
+2026-02-19 20:56:36 | INFO    | __main__                  | Loaded config: data_config
+2026-02-19 20:56:37 | INFO    | __main__                  | Loaded config: risk_config
+2026-02-19 20:56:37 | INFO    | utils.common              | Using CPU
+2026-02-19 20:56:37 | INFO    | utils.common              | Global seed set to 42
+2026-02-19 20:56:37 | INFO    | __main__                  | ======================================================================
+2026-02-19 20:56:37 | INFO    | __main__                  | HRL-SARP TRAINING PIPELINE
+2026-02-19 20:56:37 | INFO    | __main__                  | ======================================================================
+2026-02-19 20:56:37 | INFO    | __main__                  | Seed: 42 | Device: cpu
+2026-02-19 20:56:37 | INFO    | __main__                  | ------------------------------------------------------------
+2026-02-19 20:56:37 | INFO    | __main__                  | Starting Phase 3: RL training of Macro (frozen Micro)
+2026-02-19 20:56:37 | INFO    | __main__                  | ------------------------------------------------------------
+2026-02-19 20:56:37 | INFO    | training.trainer_utils    | Global seed set to 42
+2026-02-19 20:56:37 | INFO    | training.train_macro_frozen_micro | Initializing agents and environment for Phase 3...
+2026-02-19 20:56:42 | INFO    | training.train_macro_frozen_micro | Initializing MacroAgent...
+2026-02-19 20:56:48 | INFO    | agents.macro_agent        | MacroAgent initialised | actor_params=85148 | critic_params=84289
+2026-02-19 20:56:48 | ERROR   | __main__                  | ❌ Phase 3: RL training of Macro (frozen Micro) failed: 'models'
+Traceback (most recent call last):
+  File "C:\Users\HP\Desktop\Projects\RL-PROJECT\hrl_sarp\main.py", line 106, in run_training
+    func(configs, device=device, seed=seed)
+  File "C:\Users\HP\Desktop\Projects\RL-PROJECT\hrl_sarp\training\train_macro_frozen_micro.py", line 85, in train_macro_frozen_micro
+    macro_agent.actor.load_state_dict(checkpoint['models']['actor'])
+                                      ~~~~~~~~~~^^^^^^^^^^
+KeyError: 'models'

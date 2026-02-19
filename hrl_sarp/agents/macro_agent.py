@@ -227,6 +227,7 @@ class MacroAgent:
                 old_log_probs = batch["log_probs"]
                 advantages = batch["advantages"]
                 returns = batch["returns"]
+                old_values = batch["values"]
 
                 # Split state into macro_state and sector_embeddings
                 macro_state, sector_emb = self._split_observation(states)
@@ -245,8 +246,15 @@ class MacroAgent:
                 surr2 = torch.clamp(ratio, 1.0 - self.clip_eps, 1.0 + self.clip_eps) * advantages
                 policy_loss = -torch.min(surr1, surr2).mean()
 
-                # Value loss (clipped)
-                value_loss = nn.functional.mse_loss(new_values, returns)
+                # PPO value loss clipping to stabilise critic updates.
+                value_pred_clipped = old_values + (new_values - old_values).clamp(
+                    -self.clip_eps, self.clip_eps
+                )
+                value_loss_unclipped = (new_values - returns) ** 2
+                value_loss_clipped = (value_pred_clipped - returns) ** 2
+                value_loss = 0.5 * torch.max(
+                    value_loss_unclipped, value_loss_clipped
+                ).mean()
 
                 # Entropy bonus
                 entropy_loss = -entropy.mean()

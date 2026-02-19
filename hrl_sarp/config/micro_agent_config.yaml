@@ -79,7 +79,7 @@ her:
 
 # ── Replay Buffer ───────────────────────────────────────────────────
 replay_buffer:
-  capacity: 1000000               # 1M transitions
+  capacity: 50000                 # 50K transitions (reduced for memory efficiency)
   batch_size: 256                 # Mini-batch size for updates
   prioritised: false              # Standard uniform sampling (PER optional)
   # If prioritised is true:

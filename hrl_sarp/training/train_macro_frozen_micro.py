@@ -1,4 +1,4 @@
-﻿"""
+"""
 File: train_macro_frozen_micro.py
 Module: training
 Description: Phase 3 — RL training of the Macro agent (PPO) with the Micro agent's
@@ -33,6 +33,11 @@ from training.trainer_utils import (
 logger = logging.getLogger(__name__)
 
 
+def _get_project_root() -> str:
+    """Get hrl_sarp project root directory for config paths."""
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
 def train_macro_frozen_micro(
     configs: Dict[str, Any],
     device: torch.device,
@@ -52,24 +57,117 @@ def train_macro_frozen_micro(
         Training summary dict.
     """
     set_global_seed(seed)
+    root = _get_project_root()
     
     logger.info("Initializing agents and environment for Phase 3...")
     
-    # TODO: Initialize MacroAgent and MicroAgent
-    # TODO: Initialize HierarchicalEnv
-    # TODO: Call _train_macro_frozen_micro_impl
+    # Import data loader
+    from data.training_data_loader import TrainingDataLoader
+    from environment.macro_env import MacroEnv
     
-    logger.warning("⚠️  train_macro_frozen_micro is not fully implemented yet.")
-    logger.warning("    You need to:")
-    logger.warning("    1. Initialize MacroAgent and MicroAgent from configs")
-    logger.warning("    2. Load pre-trained Micro weights")
-    logger.warning("    3. Initialize HierarchicalEnv")
-    logger.warning("    4. Call _train_macro_frozen_micro_impl")
+    # Config paths (relative to hrl_sarp root)
+    macro_config = os.path.join(root, "config", "macro_agent_config.yaml")
+    micro_config = os.path.join(root, "config", "micro_agent_config.yaml")
+    data_config_path = os.path.join(root, "config", "data_config.yaml")
+    risk_config = os.path.join(root, "config", "risk_config.yaml")
     
-    return {
-        "status": "not_implemented",
-        "episodes_trained": 0,
-    }
+    # Initialize agents
+    logger.info("Initializing MacroAgent...")
+    macro_agent = MacroAgent(
+        config_path=macro_config,
+        device=device,
+    )
+    
+    # Load pre-trained Macro weights from Phase 1
+    macro_checkpoint_path = os.path.join(root, "logs", "pretrain_macro", "best_pretrain_macro.pt")
+    if os.path.exists(macro_checkpoint_path):
+        checkpoint = torch.load(macro_checkpoint_path, map_location=device)
+        # Phase 1 saves via save_checkpoint: model_actor, or legacy: models.actor
+        if "model_actor" in checkpoint:
+            macro_agent.actor.load_state_dict(checkpoint["model_actor"])
+        elif "models" in checkpoint and "actor" in checkpoint["models"]:
+            macro_agent.actor.load_state_dict(checkpoint["models"]["actor"])
+        else:
+            raise KeyError(f"Checkpoint missing actor weights. Keys: {list(checkpoint.keys())}")
+        logger.info("Loaded pre-trained Macro weights from Phase 1")
+    else:
+        logger.warning("⚠️  No pre-trained Macro weights found, starting from scratch")
+    
+    logger.info("Initializing MicroAgent...")
+    micro_agent = MicroAgent(
+        config_path=micro_config,
+        device=device,
+    )
+    
+    # Load pre-trained Micro weights from Phase 2
+    micro_checkpoint_path = os.path.join(root, "logs", "pretrain_micro", "best_pretrain_micro.pt")
+    if os.path.exists(micro_checkpoint_path):
+        checkpoint = torch.load(micro_checkpoint_path, map_location=device)
+        # Phase 2 saves via save_checkpoint: model_actor, or legacy: models.actor
+        if "model_actor" in checkpoint:
+            micro_agent.actor.load_state_dict(checkpoint["model_actor"])
+        elif "models" in checkpoint and "actor" in checkpoint["models"]:
+            micro_agent.actor.load_state_dict(checkpoint["models"]["actor"])
+        else:
+            raise KeyError(f"Checkpoint missing actor weights. Keys: {list(checkpoint.keys())}")
+        logger.info("Loaded pre-trained Micro weights from Phase 2")
+    else:
+        logger.warning("⚠️  No pre-trained Micro weights found")
+    
+    # Load environment data
+    data_cfg = configs.get("data_config", {})
+    dates = data_cfg.get("dates", {})
+    train_start = dates.get("train_start", "2015-01-01")
+    train_end = dates.get("train_end", "2022-12-31")
+    val_start = dates.get("val_start", "2023-01-01")
+    val_end = dates.get("val_end", "2023-12-31")
+    
+    loader = TrainingDataLoader(config_path=data_config_path)
+    
+    logger.info("Loading training environment data...")
+    train_data = loader.load_macro_training_data(train_start, train_end)
+    
+    # Create training environment
+    train_env = MacroEnv(
+        sector_returns_data=train_data["sector_returns"],
+        benchmark_returns_data=train_data["sector_returns"].mean(axis=1),  # Use avg as benchmark
+        macro_states_data=train_data["macro_states"],
+        sector_gnn_embeddings_data=train_data["sector_embeddings"],
+        regime_labels=train_data["regime_labels"],
+        macro_config_path=macro_config,
+        risk_config_path=risk_config,
+    )
+    logger.info("✓ Training environment created")
+    
+    # Create validation environment
+    logger.info("Loading validation environment data...")
+    val_data = loader.load_macro_training_data(val_start, val_end)
+    val_env = MacroEnv(
+        sector_returns_data=val_data["sector_returns"],
+        benchmark_returns_data=val_data["sector_returns"].mean(axis=1),
+        macro_states_data=val_data["macro_states"],
+        sector_gnn_embeddings_data=val_data["sector_embeddings"],
+        regime_labels=val_data["regime_labels"],
+        macro_config_path=macro_config,
+        risk_config_path=risk_config,
+    )
+    logger.info("✓ Validation environment created")
+    
+    # Call actual training implementation
+    log_dir = os.path.join(root, "logs", "phase3_macro")
+    logger.info("Starting RL training (Phase 3)...")
+    result = _train_macro_frozen_micro_impl(
+        macro_agent=macro_agent,
+        micro_agent=micro_agent,
+        env=train_env,
+        val_env=val_env,
+        config_path=macro_config,
+        log_dir=log_dir,
+        seed=seed,
+    )
+    
+    logger.info("✓ Phase 3 complete: %d episodes trained", result["episodes_trained"])
+    return result
 
 
 def _train_macro_frozen_micro_impl(
@@ -111,13 +209,20 @@ def _train_macro_frozen_micro_impl(
     total_timesteps: int = train_cfg.get("total_timesteps", 500_000)
     eval_interval: int = train_cfg.get("eval_interval_episodes", 50)
     save_interval: int = train_cfg.get("save_interval_episodes", 100)
+    early_stopping_patience: int = train_cfg.get("early_stopping_patience", 30)
+    num_eval_episodes: int = train_cfg.get("num_eval_episodes", 5)
+    early_stopping_metric: str = train_cfg.get("early_stopping_metric", "eval_sharpe_mean")
 
     # Freeze Micro
     micro_agent.freeze()
 
     n_steps = macro_agent.n_steps
     tracker = MetricsTracker(log_dir=log_dir)
-    early_stop = EarlyStopping(patience=30, mode="max")
+    early_stop_mode = "min" if "drawdown" in early_stopping_metric.lower() else "max"
+    early_stop = EarlyStopping(
+        patience=early_stopping_patience,
+        mode=early_stop_mode,
+    )
     curriculum = CurriculumManager(config_path=config_path)
 
     best_eval_return = float("-inf")
@@ -126,8 +231,16 @@ def _train_macro_frozen_micro_impl(
     global_step = 0
 
     logger.info(
-        "Phase 3: Macro RL training (Micro frozen) | total_steps=%d",
+        (
+            "Phase 3: Macro RL training (Micro frozen) | total_steps=%d | "
+            "eval_every=%d ep | eval_n=%d | early_stop=%s (%s, patience=%d)"
+        ),
         total_timesteps,
+        eval_interval,
+        num_eval_episodes,
+        early_stopping_metric,
+        early_stop_mode,
+        early_stopping_patience,
     )
 
     while global_step < total_timesteps:
@@ -198,14 +311,19 @@ def _train_macro_frozen_micro_impl(
 
         # Periodic evaluation
         if val_env is not None and episode_count % eval_interval == 0:
-            eval_metrics = evaluate_agent(val_env, macro_agent, n_episodes=5)
+            eval_metrics = evaluate_agent(
+                val_env,
+                macro_agent,
+                n_episodes=num_eval_episodes,
+            )
             tracker.update(eval_metrics, step=global_step)
 
             if eval_metrics["eval_return_mean"] > best_eval_return:
                 best_eval_return = eval_metrics["eval_return_mean"]
                 macro_agent.save(best_path)
 
-            if early_stop.step(eval_metrics["eval_sharpe_mean"]):
+            monitor_value = float(eval_metrics.get(early_stopping_metric, 0.0))
+            if early_stop.step(monitor_value):
                 logger.info("Early stopping at episode %d", episode_count)
                 break
 

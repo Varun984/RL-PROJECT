@@ -37,14 +37,14 @@ network:
 
 # ── PPO Hyperparameters ─────────────────────────────────────────────
 ppo:
-  learning_rate: 3.0e-4           # Adam optimizer LR
+  learning_rate: 1.5e-4           # Lower LR for smoother PPO updates
   gamma: 0.99                     # Discount factor
   gae_lambda: 0.95                # GAE(λ) for advantage estimation (Schulman et al., 2016)
-  clip_epsilon: 0.2               # PPO clipping parameter (eq. 7 in Schulman et al., 2017)
-  entropy_coef: 0.01              # Entropy bonus to encourage exploration
-  value_loss_coef: 0.5            # Coefficient for value function loss
+  clip_epsilon: 0.15              # Slightly tighter clipping for stability
+  entropy_coef: 0.02              # Reduced entropy pressure after initial exploration
+  value_loss_coef: 0.3            # Reduce critic dominance in total loss
   max_grad_norm: 0.5              # Gradient clipping threshold
-  n_epochs: 10                    # Number of PPO update epochs per data batch
+  n_epochs: 8                     # Fewer epochs to reduce overfitting per rollout
   batch_size: 64                  # Mini-batch size for PPO updates
   n_steps: 128                    # Number of steps to collect before update (rollout length)
   normalize_advantages: true      # Normalize advantages to zero mean, unit variance
@@ -88,11 +88,12 @@ reward:
 
 # ── Training Settings ──────────────────────────────────────────────
 training:
-  total_timesteps: 500000         # Total environment steps for training
-  eval_interval: 5000             # Evaluate every N steps
-  checkpoint_interval: 10000      # Save checkpoint every N steps
-  early_stopping_patience: 20     # Stop if no improvement for N evaluations
-  num_eval_episodes: 10           # Number of episodes for evaluation
+  total_timesteps: 70000          # Slightly longer run for curriculum progression
+  eval_interval_episodes: 20      # Less noisy validation checkpoints
+  save_interval_episodes: 20      # Save checkpoint every N episodes
+  early_stopping_patience: 50     # Allow more room before stopping
+  num_eval_episodes: 10           # Average over more eval episodes
+  early_stopping_metric: "eval_sharpe_mean"  # Metric monitored by early stopping
 
 # ── Pre-training (Phase 1) ──────────────────────────────────────────
 pretrain:

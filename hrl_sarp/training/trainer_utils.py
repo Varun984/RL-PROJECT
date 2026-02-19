@@ -221,7 +221,8 @@ class MetricsTracker:
         for key, value in metrics.items():
             if key not in self.history:
                 self.history[key] = []
-            self.history[key].append(value)
+            # Convert numpy types to native Python for JSON serialization
+            self.history[key].append(float(value) if hasattr(value, "item") else value)
 
         # Log to MLflow if available
         try:
@@ -247,9 +248,26 @@ class MetricsTracker:
 
     def save(self, filename: str = "metrics.json") -> None:
         path = os.path.join(self.log_dir, filename)
-        with open(path, "w") as f:
-            json.dump(self.history, f, indent=2)
+        # Convert any numpy types to native Python for JSON serialization
+        serializable = self._to_serializable(self.history)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(serializable, f, indent=2)
         logger.info("Metrics saved to %s", path)
+
+    @staticmethod
+    def _to_serializable(obj: Any) -> Any:
+        """Recursively convert numpy types to native Python for JSON."""
+        if isinstance(obj, (np.floating, np.float32, np.float64)):
+            return float(obj)
+        if isinstance(obj, (np.integer, np.int32, np.int64)):
+            return int(obj)
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        if isinstance(obj, dict):
+            return {k: MetricsTracker._to_serializable(v) for k, v in obj.items()}
+        if isinstance(obj, list):
+            return [MetricsTracker._to_serializable(v) for v in obj]
+        return obj
 
     def summary(self) -> Dict[str, Dict[str, float]]:
         """Return summary statistics for each metric."""
@@ -347,3 +365,64 @@ def _get_agent_action(agent, obs: np.ndarray, deterministic: bool) -> np.ndarray
         goal = obs[max_s * n:max_s * n + agent.goal_input_dim]
         action = agent.select_action(feats, goal, deterministic=deterministic)
     return action
+
+
+# ══════════════════════════════════════════════════════════════════════
+# AGENT EVALUATION
+# ══════════════════════════════════════════════════════════════════════
+
+
+def evaluate_agent(
+    env,
+    agent,
+    n_episodes: int = 5,
+    deterministic: bool = True,
+) -> Dict[str, float]:
+    """Evaluate an agent on an environment for n episodes.
+    
+    Args:
+        env: Gymnasium environment
+        agent: Agent with select_action method
+        n_episodes: Number of episodes to evaluate
+        deterministic: Use deterministic policy
+        
+    Returns:
+        Dict with evaluation metrics
+    """
+    episode_returns = []
+    episode_lengths = []
+    episode_sharpes = []
+    
+    for _ in range(n_episodes):
+        obs, info = env.reset()
+        done = False
+        episode_return = 0.0
+        episode_length = 0
+        
+        while not done:
+            # Parse observation for macro agent
+            if hasattr(agent, 'macro_state_dim'):
+                macro_state = obs[:agent.macro_state_dim]
+                sector_emb = obs[agent.macro_state_dim:].reshape(
+                    agent.num_sectors, agent.sector_emb_dim
+                )
+                action, _, _ = agent.select_action(macro_state, sector_emb, deterministic=deterministic)
+            else:
+                # For micro agent or other agents
+                action, _, _ = agent.select_action(obs, deterministic=deterministic)
+            
+            obs, reward, terminated, truncated, info = env.step(action)
+            done = terminated or truncated
+            episode_return += reward
+            episode_length += 1
+        
+        episode_returns.append(episode_return)
+        episode_lengths.append(episode_length)
+        episode_sharpes.append(info.get('sharpe', 0.0))
+    
+    return {
+        "eval_return_mean": float(np.mean(episode_returns)),
+        "eval_return_std": float(np.std(episode_returns)),
+        "eval_length_mean": float(np.mean(episode_lengths)),
+        "eval_sharpe_mean": float(np.mean(episode_sharpes)),
+    }

@@ -97,6 +97,8 @@ def portfolio_calmar_reward(
     stt_cost: float,
 ) -> float:
     """R_portfolio = calmar_ratio * (1 - CVaR_95%) - STT_cost"""
+    # Clip calmar to prevent reward explosion (e.g. when drawdown is tiny)
+    calmar_ratio = float(np.clip(calmar_ratio, -20.0, 20.0))
     return calmar_ratio * (1.0 - cvar_95) - stt_cost
 
 
@@ -169,7 +171,9 @@ def compute_total_macro_reward(
     )
     r_value = value_discovery_reward(weekly_return, pe_zscore, pe_threshold)
 
-    return w_macro * r_macro + w_portfolio * r_portfolio + w_regime * r_regime + w_value * r_value
+    total = w_macro * r_macro + w_portfolio * r_portfolio + w_regime * r_regime + w_value * r_value
+    # Clip to prevent value function explosion in PPO
+    return float(np.clip(total, -10.0, 10.0))
 
 
 def compute_total_micro_reward(
