@@ -1,4 +1,4 @@
-"""
+﻿"""
 File: train_macro_frozen_micro.py
 Module: training
 Description: Phase 3 — RL training of the Macro agent (PPO) with the Micro agent's
@@ -16,6 +16,7 @@ import os
 from typing import Any, Dict, Optional
 
 import numpy as np
+import torch
 import yaml
 
 from agents.macro_agent import MacroAgent
@@ -33,6 +34,45 @@ logger = logging.getLogger(__name__)
 
 
 def train_macro_frozen_micro(
+    configs: Dict[str, Any],
+    device: torch.device,
+    seed: int = 42,
+) -> Dict[str, Any]:
+    """Phase 3: RL training of Macro agent with frozen Micro.
+    
+    This is a wrapper that initializes agents and environment, then calls
+    the actual training function.
+
+    Args:
+        configs: Dictionary containing all config files (macro, micro, data, risk).
+        device: Torch device (cpu or cuda).
+        seed: Random seed.
+
+    Returns:
+        Training summary dict.
+    """
+    set_global_seed(seed)
+    
+    logger.info("Initializing agents and environment for Phase 3...")
+    
+    # TODO: Initialize MacroAgent and MicroAgent
+    # TODO: Initialize HierarchicalEnv
+    # TODO: Call _train_macro_frozen_micro_impl
+    
+    logger.warning("⚠️  train_macro_frozen_micro is not fully implemented yet.")
+    logger.warning("    You need to:")
+    logger.warning("    1. Initialize MacroAgent and MicroAgent from configs")
+    logger.warning("    2. Load pre-trained Micro weights")
+    logger.warning("    3. Initialize HierarchicalEnv")
+    logger.warning("    4. Call _train_macro_frozen_micro_impl")
+    
+    return {
+        "status": "not_implemented",
+        "episodes_trained": 0,
+    }
+
+
+def _train_macro_frozen_micro_impl(
     macro_agent: MacroAgent,
     micro_agent: MicroAgent,
     env,
@@ -65,8 +105,7 @@ def train_macro_frozen_micro(
     set_global_seed(seed)
     os.makedirs(log_dir, exist_ok=True)
 
-    with open(config_path, "r") as f:
-        cfg = yaml.safe_load(f)
+    with open(config_path, "r", encoding="utf-8") as f:cfg = yaml.safe_load(f)
 
     train_cfg = cfg.get("training", {})
     total_timesteps: int = train_cfg.get("total_timesteps", 500_000)

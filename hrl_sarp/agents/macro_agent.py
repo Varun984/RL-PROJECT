@@ -41,7 +41,7 @@ class MacroAgent:
         config_path: str = "config/macro_agent_config.yaml",
         device: str = "cpu",
     ) -> None:
-        with open(config_path, "r") as f:
+        with open(config_path, "r", encoding="utf-8") as f:
             self.config = yaml.safe_load(f)
 
         self.device = torch.device(device)

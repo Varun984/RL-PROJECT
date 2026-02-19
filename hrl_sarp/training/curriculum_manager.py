@@ -1,4 +1,4 @@
-"""
+﻿"""
 File: curriculum_manager.py
 Module: training
 Description: Curriculum learning manager that schedules training difficulty from
@@ -67,8 +67,7 @@ class CurriculumManager:
         self,
         config_path: str = "config/macro_agent_config.yaml",
     ) -> None:
-        with open(config_path, "r") as f:
-            cfg = yaml.safe_load(f)
+        with open(config_path, "r", encoding="utf-8") as f:cfg = yaml.safe_load(f)
 
         train_cfg = cfg.get("training", {})
         self.curriculum_enabled: bool = train_cfg.get("curriculum_enabled", True)

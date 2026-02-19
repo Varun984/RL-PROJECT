@@ -1,4 +1,4 @@
-"""
+﻿"""
 File: data_pipeline.py
 Module: data
 Description: Orchestrates all data fetchers (market, fundamental, news, macro) in a
@@ -56,8 +56,7 @@ class DataPipeline:
     """
 
     def __init__(self, config_path: str = "config/data_config.yaml") -> None:
-        with open(config_path, "r") as f:
-            self.config: Dict[str, Any] = yaml.safe_load(f)
+        with open(config_path, "r", encoding="utf-8") as f:self.config: Dict[str, Any] = yaml.safe_load(f)
 
         self.pipeline_config = self.config["pipeline"]
         self.dates_config = self.config["dates"]

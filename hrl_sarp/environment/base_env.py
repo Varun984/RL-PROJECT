@@ -1,4 +1,4 @@
-"""
+﻿"""
 File: base_env.py
 Module: environment
 Description: Abstract base Gymnasium environment providing shared utilities for
@@ -41,8 +41,7 @@ class BasePortfolioEnv(gym.Env, ABC):
         self.render_mode = render_mode
 
         # Load risk configuration
-        with open(risk_config_path, "r") as f:
-            self.risk_cfg = yaml.safe_load(f)
+        with open(risk_config_path, "r", encoding="utf-8") as f:self.risk_cfg = yaml.safe_load(f)
 
         # Transaction cost parameters
         tc = self.risk_cfg["transaction_costs"]

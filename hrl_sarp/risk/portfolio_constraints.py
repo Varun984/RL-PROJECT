@@ -35,7 +35,7 @@ class PortfolioConstraints:
         self,
         config_path: str = "config/risk_config.yaml",
     ) -> None:
-        with open(config_path, "r") as f:
+        with open(config_path, "r", encoding="utf-8") as f:
             self.cfg = yaml.safe_load(f)
 
         # Constraints from config

@@ -1,4 +1,4 @@
-"""
+﻿"""
 File: micro_env.py
 Module: environment
 Description: MicroEnv is a daily-stepping Gymnasium environment for the Micro agent.
@@ -53,8 +53,7 @@ class MicroEnv(BasePortfolioEnv):
     ) -> None:
         super().__init__(risk_config_path, initial_capital, render_mode)
 
-        with open(micro_config_path, "r") as f:
-            self.micro_cfg = yaml.safe_load(f)
+        with open(micro_config_path, "r", encoding="utf-8") as f:self.micro_cfg = yaml.safe_load(f)
 
         # Episode data
         self.stock_returns_data = stock_returns_data  # (T, N_stocks)

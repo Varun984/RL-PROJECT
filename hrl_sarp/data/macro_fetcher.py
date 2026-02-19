@@ -1,4 +1,4 @@
-"""
+﻿"""
 File: macro_fetcher.py
 Module: data
 Description: Fetches macroeconomic data for India: RBI repo rate, India VIX, USD/INR,
@@ -52,8 +52,7 @@ class MacroFetcher:
     """
 
     def __init__(self, config_path: str = "config/data_config.yaml") -> None:
-        with open(config_path, "r") as f:
-            self.config: Dict[str, Any] = yaml.safe_load(f)
+        with open(config_path, "r", encoding="utf-8") as f:self.config: Dict[str, Any] = yaml.safe_load(f)
         self.macro_config = self.config["macro"]
         self.session = requests.Session()
         self.session.headers.update({

@@ -1,4 +1,4 @@
-"""
+﻿"""
 File: market_data_fetcher.py
 Module: data
 Description: Fetches OHLCV market data, F&O option chain data, and index data for Indian
@@ -82,8 +82,7 @@ class MarketDataFetcher:
         Args:
             config_path: Path to data_config.yaml file.
         """
-        with open(config_path, "r") as f:
-            self.config: Dict[str, Any] = yaml.safe_load(f)
+        with open(config_path, "r", encoding="utf-8") as f:self.config: Dict[str, Any] = yaml.safe_load(f)
 
         self.market_config = self.config["market_data"]
         self.kite_enabled: bool = self.market_config["kite_api"].get("enabled", False)

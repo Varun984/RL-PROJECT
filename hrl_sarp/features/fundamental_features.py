@@ -1,4 +1,4 @@
-"""
+﻿"""
 File: fundamental_features.py
 Module: features
 Description: Normalised fundamental features: P/E vs sector median z-score, P/B z-score,
@@ -49,8 +49,7 @@ class FundamentalFeatures:
     """
 
     def __init__(self, config_path: str = "config/data_config.yaml") -> None:
-        with open(config_path, "r") as f:
-            self.config: Dict[str, Any] = yaml.safe_load(f)
+        with open(config_path, "r", encoding="utf-8") as f:self.config: Dict[str, Any] = yaml.safe_load(f)
         self.sector_mapping: Dict[str, List[str]] = self.config.get("sectors", {}).get("mapping", {})
         logger.info("FundamentalFeatures initialised | sectors=%d", len(self.sector_mapping))
 

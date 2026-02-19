@@ -48,7 +48,7 @@ class RegimeDetector:
         self.n_iter = n_iter
         self.random_state = random_state
 
-        with open(config_path, "r") as f:
+        with open(config_path, "r", encoding="utf-8") as f:
             self.config = yaml.safe_load(f)
 
         self.regime_cfg = self.config["regime"]

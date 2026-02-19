@@ -1,4 +1,4 @@
-"""
+﻿"""
 File: pretrain_macro.py
 Module: training
 Description: Phase 1 — Supervised pre-training of the Macro agent on historical
@@ -35,6 +35,46 @@ logger = logging.getLogger(__name__)
 
 
 def pretrain_macro(
+    configs: Dict[str, Any],
+    device: torch.device,
+    seed: int = 42,
+) -> Dict[str, Any]:
+    """Phase 1: Supervised pre-training of the Macro agent.
+    
+    This is a wrapper that initializes the macro agent and calls the actual
+    pre-training function with prepared data.
+
+    Args:
+        configs: Dictionary containing all config files (macro, micro, data, risk).
+        device: Torch device (cpu or cuda).
+        seed: Random seed.
+
+    Returns:
+        Dict with training metrics and best checkpoint path.
+    """
+    set_global_seed(seed)
+    
+    logger.info("Initializing Macro agent for pre-training...")
+    
+    # TODO: Initialize MacroAgent with configs
+    # TODO: Load and prepare training data
+    # TODO: Call _pretrain_macro_impl with agent and data
+    
+    logger.warning("⚠️  pretrain_macro is not fully implemented yet.")
+    logger.warning("    You need to:")
+    logger.warning("    1. Initialize MacroAgent from configs")
+    logger.warning("    2. Load historical data for pre-training")
+    logger.warning("    3. Call _pretrain_macro_impl with prepared data")
+    
+    return {
+        "best_loss": 0.0,
+        "best_checkpoint": "checkpoints/pretrain_macro_best.pt",
+        "epochs_trained": 0,
+        "status": "not_implemented",
+    }
+
+
+def _pretrain_macro_impl(
     macro_agent: MacroAgent,
     train_data: Dict[str, np.ndarray],
     val_data: Optional[Dict[str, np.ndarray]] = None,
@@ -66,8 +106,7 @@ def pretrain_macro(
     set_global_seed(seed)
     os.makedirs(log_dir, exist_ok=True)
 
-    with open(config_path, "r") as f:
-        cfg = yaml.safe_load(f)
+    with open(config_path, "r", encoding="utf-8") as f:cfg = yaml.safe_load(f)
 
     train_cfg = cfg.get("training", {})
     n_epochs: int = train_cfg.get("pretrain_epochs", 50)

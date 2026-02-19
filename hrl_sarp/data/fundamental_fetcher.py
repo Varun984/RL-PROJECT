@@ -1,4 +1,4 @@
-"""
+﻿"""
 File: fundamental_fetcher.py
 Module: data
 Description: Fetches fundamental financial data for Indian equities from Screener.in
@@ -43,8 +43,7 @@ class FundamentalFetcher:
     """
 
     def __init__(self, config_path: str = "config/data_config.yaml") -> None:
-        with open(config_path, "r") as f:
-            self.config: Dict[str, Any] = yaml.safe_load(f)
+        with open(config_path, "r", encoding="utf-8") as f:self.config: Dict[str, Any] = yaml.safe_load(f)
         self.fund_config = self.config["fundamentals"]
         self.rate_limit: float = self.fund_config["screener"].get("rate_limit_seconds", 2.0)
         self.session = requests.Session()

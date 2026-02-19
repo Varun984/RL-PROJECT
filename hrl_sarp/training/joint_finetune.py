@@ -1,4 +1,4 @@
-"""
+﻿"""
 File: joint_finetune.py
 Module: training
 Description: Phase 5 — Joint fine-tuning of both Macro and Micro agents with
@@ -17,6 +17,7 @@ import os
 from typing import Any, Dict, Optional
 
 import numpy as np
+import torch
 import yaml
 
 from agents.macro_agent import MacroAgent
@@ -33,6 +34,46 @@ logger = logging.getLogger(__name__)
 
 
 def joint_finetune(
+    configs: Dict[str, Any],
+    device: torch.device,
+    seed: int = 42,
+) -> Dict[str, Any]:
+    """Phase 5: Joint fine-tuning of both agents.
+    
+    This is a wrapper that initializes agents and environment, then calls
+    the actual training function.
+
+    Args:
+        configs: Dictionary containing all config files (macro, micro, data, risk).
+        device: Torch device (cpu or cuda).
+        seed: Random seed.
+
+    Returns:
+        Training summary dict.
+    """
+    set_global_seed(seed)
+    
+    logger.info("Initializing agents and environment for Phase 5...")
+    
+    # TODO: Initialize MacroAgent and MicroAgent
+    # TODO: Load pre-trained weights from Phase 3 and 4
+    # TODO: Initialize HierarchicalEnv
+    # TODO: Call _joint_finetune_impl
+    
+    logger.warning("⚠️  joint_finetune is not fully implemented yet.")
+    logger.warning("    You need to:")
+    logger.warning("    1. Initialize MacroAgent and MicroAgent from configs")
+    logger.warning("    2. Load pre-trained weights from previous phases")
+    logger.warning("    3. Initialize HierarchicalEnv")
+    logger.warning("    4. Call _joint_finetune_impl with alternating updates")
+    
+    return {
+        "status": "not_implemented",
+        "episodes_trained": 0,
+    }
+
+
+def _joint_finetune_impl(
     macro_agent: MacroAgent,
     micro_agent: MicroAgent,
     env,
@@ -67,10 +108,8 @@ def joint_finetune(
     set_global_seed(seed)
     os.makedirs(log_dir, exist_ok=True)
 
-    with open(macro_config_path, "r") as f:
-        macro_cfg = yaml.safe_load(f)
-    with open(micro_config_path, "r") as f:
-        micro_cfg = yaml.safe_load(f)
+    with open(macro_config_path, "r", encoding="utf-8") as f:macro_cfg = yaml.safe_load(f)
+    with open(micro_config_path, "r", encoding="utf-8") as f:micro_cfg = yaml.safe_load(f)
 
     # Joint training parameters
     joint_cfg = macro_cfg.get("training", {}).get("joint", {})

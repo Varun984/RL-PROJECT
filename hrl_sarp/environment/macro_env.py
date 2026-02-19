@@ -1,4 +1,4 @@
-"""
+﻿"""
 File: macro_env.py
 Module: environment
 Description: MacroEnv is a weekly-stepping Gymnasium environment for the Macro agent.
@@ -53,8 +53,7 @@ class MacroEnv(BasePortfolioEnv):
     ) -> None:
         super().__init__(risk_config_path, initial_capital, render_mode)
 
-        with open(macro_config_path, "r") as f:
-            self.macro_cfg = yaml.safe_load(f)
+        with open(macro_config_path, "r", encoding="utf-8") as f:self.macro_cfg = yaml.safe_load(f)
 
         # Pre-loaded episode data (walk-forward slices)
         self.sector_returns_data = sector_returns_data  # (T, 11)

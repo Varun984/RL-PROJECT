@@ -35,7 +35,7 @@ class FeatureEngineer:
     """Assembles all feature modules into macro_state and micro_state tensors."""
 
     def __init__(self, config_path: str = "config/data_config.yaml") -> None:
-        with open(config_path, "r") as f:
+        with open(config_path, "r", encoding="utf-8") as f:
             self.config = yaml.safe_load(f)
 
         self.macro_feature_names: List[str] = self.config["features"]["macro_state"]

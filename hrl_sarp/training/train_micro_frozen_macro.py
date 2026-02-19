@@ -1,4 +1,4 @@
-"""
+﻿"""
 File: train_micro_frozen_macro.py
 Module: training
 Description: Phase 4 — RL training of the Micro agent (TD3+HER) with the Macro agent's
@@ -16,6 +16,7 @@ import os
 from typing import Any, Dict, Optional
 
 import numpy as np
+import torch
 import yaml
 
 from agents.macro_agent import MacroAgent
@@ -32,6 +33,45 @@ logger = logging.getLogger(__name__)
 
 
 def train_micro_frozen_macro(
+    configs: Dict[str, Any],
+    device: torch.device,
+    seed: int = 42,
+) -> Dict[str, Any]:
+    """Phase 4: RL training of Micro agent with frozen Macro.
+    
+    This is a wrapper that initializes agents and environment, then calls
+    the actual training function.
+
+    Args:
+        configs: Dictionary containing all config files (macro, micro, data, risk).
+        device: Torch device (cpu or cuda).
+        seed: Random seed.
+
+    Returns:
+        Training summary dict.
+    """
+    set_global_seed(seed)
+    
+    logger.info("Initializing agents and environment for Phase 4...")
+    
+    # TODO: Initialize MacroAgent and MicroAgent
+    # TODO: Initialize HierarchicalEnv
+    # TODO: Call _train_micro_frozen_macro_impl
+    
+    logger.warning("⚠️  train_micro_frozen_macro is not fully implemented yet.")
+    logger.warning("    You need to:")
+    logger.warning("    1. Initialize MacroAgent and MicroAgent from configs")
+    logger.warning("    2. Load pre-trained Macro weights")
+    logger.warning("    3. Initialize HierarchicalEnv with HER replay buffer")
+    logger.warning("    4. Call _train_micro_frozen_macro_impl")
+    
+    return {
+        "status": "not_implemented",
+        "episodes_trained": 0,
+    }
+
+
+def _train_micro_frozen_macro_impl(
     micro_agent: MicroAgent,
     macro_agent: MacroAgent,
     env,
@@ -63,8 +103,7 @@ def train_micro_frozen_macro(
     set_global_seed(seed)
     os.makedirs(log_dir, exist_ok=True)
 
-    with open(config_path, "r") as f:
-        cfg = yaml.safe_load(f)
+    with open(config_path, "r", encoding="utf-8") as f:cfg = yaml.safe_load(f)
 
     train_cfg = cfg.get("training", {})
     total_timesteps: int = train_cfg.get("total_timesteps", 1_000_000)

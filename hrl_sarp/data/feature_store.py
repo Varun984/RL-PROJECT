@@ -1,4 +1,4 @@
-"""
+﻿"""
 File: feature_store.py
 Module: data
 Description: SQLite/TimescaleDB interface for storing and retrieving feature vectors with
@@ -51,8 +51,7 @@ class FeatureStore:
     """
 
     def __init__(self, config_path: str = "config/data_config.yaml") -> None:
-        with open(config_path, "r") as f:
-            self.config: Dict[str, Any] = yaml.safe_load(f)
+        with open(config_path, "r", encoding="utf-8") as f:self.config: Dict[str, Any] = yaml.safe_load(f)
 
         fs_config = self.config["feature_store"]
         self.backend: str = fs_config.get("backend", "sqlite")

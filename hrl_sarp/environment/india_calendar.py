@@ -1,4 +1,4 @@
-"""
+﻿"""
 File: india_calendar.py
 Module: environment
 Description: IndiaCalendar tracks RBI MPC dates, Union Budget, NSE expiry cycles,
@@ -50,8 +50,7 @@ class IndiaCalendar:
     """Tracks Indian market events and trading calendar."""
 
     def __init__(self, risk_config_path: str = "config/risk_config.yaml") -> None:
-        with open(risk_config_path, "r") as f:
-            self.risk_cfg = yaml.safe_load(f)
+        with open(risk_config_path, "r", encoding="utf-8") as f:self.risk_cfg = yaml.safe_load(f)
 
         self.event_categories = self.risk_cfg["events"]["categories"]
         self.lookforward_days: int = self.risk_cfg["events"]["event_lookforward_days"]

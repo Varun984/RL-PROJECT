@@ -1,4 +1,4 @@
-"""
+﻿"""
 File: news_fetcher.py
 Module: data
 Description: RSS/web scraper for Indian financial news from Economic Times, Moneycontrol,
@@ -79,8 +79,7 @@ class NewsFetcher:
     }
 
     def __init__(self, config_path: str = "config/data_config.yaml") -> None:
-        with open(config_path, "r") as f:
-            self.config: Dict[str, Any] = yaml.safe_load(f)
+        with open(config_path, "r", encoding="utf-8") as f:self.config: Dict[str, Any] = yaml.safe_load(f)
         self.news_config = self.config["news"]
         self.scraping_config = self.news_config["scraping"]
         self.session = requests.Session()

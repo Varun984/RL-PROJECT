@@ -1,4 +1,4 @@
-"""
+﻿"""
 File: macro_features.py
 Module: features
 Description: Computes macro-level features for the Macro agent's 18D state vector:
@@ -52,8 +52,7 @@ class MacroFeatures:
     """
 
     def __init__(self, config_path: str = "config/data_config.yaml") -> None:
-        with open(config_path, "r") as f:
-            self.config: Dict[str, Any] = yaml.safe_load(f)
+        with open(config_path, "r", encoding="utf-8") as f:self.config: Dict[str, Any] = yaml.safe_load(f)
         logger.info("MacroFeatures initialised.")
 
     # ══════════════════════════════════════════════════════════════════
