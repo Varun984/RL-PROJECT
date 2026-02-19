@@ -94,6 +94,8 @@ training:
   early_stopping_patience: 50     # Allow more room before stopping
   num_eval_episodes: 10           # Average over more eval episodes
   early_stopping_metric: "eval_sharpe_mean"  # Metric monitored by early stopping
+  resume_phase3: true             # If true, continue from latest logs/phase3_macro/macro_ep*.pt
+  resume_checkpoint: ""           # Optional explicit checkpoint path (absolute or project-relative)
 
 # ── Pre-training (Phase 1) ──────────────────────────────────────────
 pretrain:

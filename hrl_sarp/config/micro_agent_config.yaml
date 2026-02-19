@@ -136,6 +136,8 @@ training:
   early_stopping_patience: 30     # Stop if no improvement for N evaluations
   num_eval_episodes: 10           # Episodes per evaluation
   warmup_steps: 5000              # Steps with random actions before learning
+  resume_phase4: true             # Auto-resume from latest logs/phase4_micro/micro_ep*.pt
+  resume_checkpoint: null         # Optional explicit checkpoint path to resume from
 
 # ── Pre-training (Phase 2) ──────────────────────────────────────────
 pretrain:

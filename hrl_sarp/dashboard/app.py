@@ -149,6 +149,11 @@ def _inject_styles() -> None:
             padding: 0.75rem 0.8rem;
             box-shadow: 0 8px 24px rgba(16, 42, 67, 0.05);
         }
+        [data-testid="stMetricLabel"] p,
+        [data-testid="stMetricValue"] div,
+        [data-testid="stMetricDelta"] div {
+            color: #12243a !important;
+        }
         .hero {
             background: linear-gradient(145deg, #ffffff 0%, #f3faff 100%);
             border: 1px solid var(--border);
@@ -204,19 +209,21 @@ def _inject_styles() -> None:
 
 
 def _render_kpi_card(label: str, value: str, subtitle: str = "", tone: str = "ok") -> None:
-    safe_label = escape(label)
-    safe_value = escape(value)
-    safe_subtitle = escape(subtitle)
-    st.markdown(
-        f"""
-        <div class="kpi-card kpi-{tone}">
-            <div class="kpi-label">{safe_label}</div>
-            <div class="kpi-value">{safe_value}</div>
-            <div class="kpi-sub">{safe_subtitle}</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    # Use native Streamlit metric rendering to avoid blank custom HTML cards
+    # on certain browsers/themes.
+    st.metric(label=label, value=value)
+    if subtitle:
+        st.caption(subtitle)
+
+
+def _data_roots() -> List[str]:
+    """Ordered data roots: package root first, then workspace root."""
+    roots = [PROJECT_ROOT, os.path.dirname(PROJECT_ROOT)]
+    unique_roots: List[str] = []
+    for root in roots:
+        if root not in unique_roots:
+            unique_roots.append(root)
+    return unique_roots
 
 
 def _render_header(bundle: Dict[str, Any]) -> None:
@@ -274,10 +281,14 @@ def _read_json(path: str) -> Optional[Dict[str, Any]]:
 
 
 def _load_evaluation_results() -> Tuple[Dict[str, Any], Optional[str]]:
-    candidates = [
-        os.path.join(PROJECT_ROOT, "results", "evaluation_results.json"),
-        os.path.join(PROJECT_ROOT, "results", "results", "evaluation_results.json"),
-    ]
+    candidates: List[str] = []
+    for root in _data_roots():
+        candidates.extend(
+            [
+                os.path.join(root, "results", "evaluation_results.json"),
+                os.path.join(root, "results", "results", "evaluation_results.json"),
+            ]
+        )
     for path in candidates:
         if os.path.exists(path):
             data = _read_json(path)
@@ -287,12 +298,14 @@ def _load_evaluation_results() -> Tuple[Dict[str, Any], Optional[str]]:
 
 
 def _load_phase3_metrics() -> Tuple[Dict[str, Any], Optional[str]]:
-    candidates = [os.path.join(PROJECT_ROOT, "logs", "phase3_macro", "phase3_macro_metrics.json")]
-    archive_paths = glob.glob(
-        os.path.join(PROJECT_ROOT, "logs", "archive", "phase3_*", "phase3_macro_metrics.json")
-    )
-    archive_paths.sort(key=os.path.getmtime, reverse=True)
-    candidates.extend(archive_paths)
+    candidates: List[str] = []
+    for root in _data_roots():
+        candidates.append(os.path.join(root, "logs", "phase3_macro", "phase3_macro_metrics.json"))
+        archive_paths = glob.glob(
+            os.path.join(root, "logs", "archive", "phase3_*", "phase3_macro_metrics.json")
+        )
+        archive_paths.sort(key=os.path.getmtime, reverse=True)
+        candidates.extend(archive_paths)
 
     for path in candidates:
         if os.path.exists(path):
@@ -303,8 +316,13 @@ def _load_phase3_metrics() -> Tuple[Dict[str, Any], Optional[str]]:
 
 
 def _load_decisions() -> Tuple[List[Dict[str, Any]], Optional[str]]:
-    path = os.path.join(PROJECT_ROOT, "logs", "decisions", "decisions.jsonl")
-    if not os.path.exists(path):
+    path: Optional[str] = None
+    for root in _data_roots():
+        candidate = os.path.join(root, "logs", "decisions", "decisions.jsonl")
+        if os.path.exists(candidate):
+            path = candidate
+            break
+    if not path:
         return [], None
 
     decisions: List[Dict[str, Any]] = []
@@ -335,7 +353,9 @@ def _load_risk_config() -> Tuple[Dict[str, Any], Optional[str]]:
 
 
 def _latest_train_log_path() -> Optional[str]:
-    paths = glob.glob(os.path.join(PROJECT_ROOT, "logs", "train_*.log"))
+    paths: List[str] = []
+    for root in _data_roots():
+        paths.extend(glob.glob(os.path.join(root, "logs", "train_*.log")))
     if not paths:
         return None
     return max(paths, key=os.path.getmtime)
@@ -471,48 +491,106 @@ def _source_frame(bundle: Dict[str, Any]) -> pd.DataFrame:
     return pd.DataFrame(out)
 
 
+def _is_demo_evaluation(evaluation: Dict[str, Any]) -> bool:
+    checkpoint = str(evaluation.get("model_checkpoint", "")).lower()
+    if "demo" in checkpoint:
+        return True
+    eval_date = str(evaluation.get("evaluation_date", ""))
+    return eval_date == "" and not evaluation.get("performance_metrics")
+
+
 def render_overview(bundle: Dict[str, Any], show_paths: bool) -> None:
     st.subheader("Portfolio Overview")
 
     evaluation = bundle["evaluation"]
     training = bundle["training_log"]
-    values = _get_portfolio_values(evaluation)
+    phase3_metrics = bundle["phase3_metrics"]
+    eval_values = _get_portfolio_values(evaluation)
+    phase3_returns = np.array(phase3_metrics.get("episode/return", []), dtype=float)
     perf = evaluation.get("performance_metrics", {})
+    demo_eval = _is_demo_evaluation(evaluation)
 
-    if values.size > 1:
+    series_label = "Portfolio Value"
+    values = eval_values
+
+    # If evaluation is demo/stale, prefer live Phase 3 learning curve.
+    if (values.size <= 1 or demo_eval) and phase3_returns.size > 1:
+        values = phase3_returns
+        series_label = "Phase 3 Learning Curve"
+
+    is_phase3_source = series_label == "Phase 3 Learning Curve"
+
+    if not is_phase3_source and values.size > 1:
         total_return = (values[-1] / values[0]) - 1.0
-        drawdown = _series_to_drawdown(values)
-        current_dd = drawdown[-1]
+        current_dd = float(_series_to_drawdown(values)[-1])
+        sharpe = float(perf.get("sharpe_ratio", np.nan))
+        cagr = float(perf.get("cagr", np.nan))
+        latest_ep = None
+        latest_ep_return = None
+        latest_ep_sharpe = None
+        rolling_return = None
     else:
-        total_return = 0.0
+        total_return = np.nan
         current_dd = 0.0
-
-    sharpe = float(perf.get("sharpe_ratio", np.nan))
-    cagr = float(perf.get("cagr", np.nan))
+        sharpe = np.nan
+        cagr = np.nan
+        episodes = training.get("episodes", [])
+        latest_ep = int(episodes[-1]["episode"]) if episodes else int(values.size)
+        latest_ep_return = float(episodes[-1]["return"]) if episodes else (float(values[-1]) if values.size else np.nan)
+        latest_ep_sharpe = float(episodes[-1]["sharpe"]) if episodes else np.nan
+        rolling_return = (
+            float(pd.Series(values).rolling(window=20, min_periods=1).mean().iloc[-1])
+            if values.size
+            else np.nan
+        )
     status = training.get("status", "Idle")
+    total_steps = int(training.get("total_steps", 0))
+    latest_step = int(training.get("latest_step", 0))
 
     c1, c2, c3, c4 = st.columns(4)
-    with c1:
-        _render_kpi_card(
-            "Portfolio Value",
-            _format_inr(values[-1]) if values.size else "N/A",
-            "Latest mark-to-market value",
-            tone="ok",
-        )
-    with c2:
-        _render_kpi_card("Total Return", _format_pct(total_return), "From evaluation period", tone="ok")
-    with c3:
-        sharpe_text = f"{sharpe:.2f}" if np.isfinite(sharpe) else "N/A"
-        cagr_text = _format_pct(cagr) if np.isfinite(cagr) else "CAGR unavailable"
-        _render_kpi_card("Sharpe Ratio", sharpe_text, cagr_text, tone="ok")
-    with c4:
-        dd_text = _format_pct(current_dd)
-        _render_kpi_card("Run Status", status, f"Current drawdown: {dd_text}", tone="warn" if status == "Idle" else "ok")
+    if not is_phase3_source:
+        with c1:
+            _render_kpi_card(
+                series_label,
+                _format_inr(values[-1]) if values.size else "N/A",
+                "Latest mark-to-market value",
+                tone="ok",
+            )
+        with c2:
+            _render_kpi_card("Total Return", _format_pct(total_return), "From evaluation period", tone="ok")
+        with c3:
+            sharpe_text = f"{sharpe:.2f}" if np.isfinite(sharpe) else "N/A"
+            cagr_text = _format_pct(cagr) if np.isfinite(cagr) else "CAGR unavailable"
+            _render_kpi_card("Sharpe Ratio", sharpe_text, cagr_text, tone="ok")
+        with c4:
+            dd_text = _format_pct(current_dd)
+            _render_kpi_card("Run Status", status, f"Current drawdown: {dd_text}", tone="warn" if status == "Idle" else "ok")
+    else:
+        with c1:
+            ret_text = f"{latest_ep_return:.4f}" if np.isfinite(latest_ep_return) else "N/A"
+            _render_kpi_card("Latest Episode Return", ret_text, f"Episode {latest_ep}", tone="ok")
+        with c2:
+            roll_text = f"{rolling_return:.4f}" if np.isfinite(rolling_return) else "N/A"
+            _render_kpi_card("Rolling Return (20 ep)", roll_text, "Smoothed learning trend", tone="ok")
+        with c3:
+            sh_text = f"{latest_ep_sharpe:.3f}" if np.isfinite(latest_ep_sharpe) else "N/A"
+            _render_kpi_card("Latest Episode Sharpe", sh_text, "Training episode metric", tone="ok")
+        with c4:
+            if total_steps > 0:
+                step_text = f"{latest_step:,}/{total_steps:,}"
+                step_sub = f"{(latest_step / total_steps) * 100:.1f}% complete"
+            else:
+                step_text = f"{latest_step:,}"
+                step_sub = "Target steps unavailable"
+            _render_kpi_card("Run Status", status, f"{step_text} steps | {step_sub}", tone="warn" if status == "Idle" else "ok")
 
     st.markdown("")
+    if demo_eval and phase3_returns.size > 1:
+        st.warning("Evaluation file looks like demo output. Overview is showing live Phase 3 training metrics instead.")
+
     left, right = st.columns([2, 1])
     with left:
-        if values.size > 1:
+        if not is_phase3_source and values.size > 1:
             dd = _series_to_drawdown(values) * 100.0
             fig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.72, 0.28], vertical_spacing=0.1)
             fig.add_trace(
@@ -522,7 +600,7 @@ def render_overview(bundle: Dict[str, Any], show_paths: bool) -> None:
                     line=dict(width=2.5, color="#1f77ff"),
                     fill="tozeroy",
                     fillcolor="rgba(31,119,255,0.12)",
-                    name="Portfolio value",
+                    name=series_label,
                 ),
                 row=1,
                 col=1,
@@ -543,27 +621,79 @@ def render_overview(bundle: Dict[str, Any], show_paths: bool) -> None:
                 template="plotly_white",
                 height=520,
                 margin=dict(l=10, r=10, t=25, b=10),
-                title="Equity Curve and Drawdown",
+                title=f"{series_label} and Drawdown",
                 legend=dict(orientation="h", y=1.05, x=0.0),
             )
-            fig.update_yaxes(title_text="Portfolio Value", row=1, col=1)
+            fig.update_yaxes(title_text=series_label, row=1, col=1)
             fig.update_yaxes(title_text="Drawdown %", row=2, col=1)
             fig.update_xaxes(title_text="Observation Index", row=2, col=1)
+            st.plotly_chart(fig, use_container_width=True)
+        elif is_phase3_source and values.size > 1:
+            rolling = pd.Series(values).rolling(window=20, min_periods=1).mean().values
+            fig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.72, 0.28], vertical_spacing=0.1)
+            x_vals = np.arange(1, len(values) + 1)
+            fig.add_trace(
+                go.Scatter(
+                    x=x_vals,
+                    y=values,
+                    mode="lines",
+                    line=dict(width=1.8, color="#1f77ff"),
+                    name="Episode return",
+                ),
+                row=1,
+                col=1,
+            )
+            fig.add_trace(
+                go.Scatter(
+                    x=x_vals,
+                    y=rolling,
+                    mode="lines",
+                    line=dict(width=2.8, color="#0f9d76"),
+                    name="Rolling mean (20)",
+                ),
+                row=1,
+                col=1,
+            )
+            if training.get("episodes"):
+                ep_df = pd.DataFrame(training["episodes"])
+                fig.add_trace(
+                    go.Scatter(
+                        x=ep_df["episode"],
+                        y=ep_df["sharpe"],
+                        mode="lines",
+                        line=dict(width=2, color="#d64545"),
+                        name="Episode sharpe",
+                    ),
+                    row=2,
+                    col=1,
+                )
+            fig.update_layout(
+                template="plotly_white",
+                height=520,
+                margin=dict(l=10, r=10, t=25, b=10),
+                title="Phase 3 Episode Returns and Sharpe",
+                legend=dict(orientation="h", y=1.05, x=0.0),
+            )
+            fig.update_yaxes(title_text="Return", row=1, col=1)
+            fig.update_yaxes(title_text="Sharpe", row=2, col=1)
+            fig.update_xaxes(title_text="Episode", row=2, col=1)
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("No evaluation portfolio series found yet.")
 
     with right:
-        phase3_metrics = bundle["phase3_metrics"]
         episode_returns = phase3_metrics.get("episode/return", [])
         eval_sharpe = phase3_metrics.get("eval_sharpe_mean", [])
         summary_rows = [
+            ("Overview source", series_label),
             ("Phase 3 episodes recorded", len(episode_returns)),
             ("Eval checkpoints", len(eval_sharpe)),
             ("Decision log entries", len(bundle["decisions"])),
             ("Latest log file", os.path.basename(bundle["train_log_path"] or "N/A")),
         ]
         summary_df = pd.DataFrame(summary_rows, columns=["Metric", "Value"])
+        # Keep a single dtype to avoid Arrow serialization warnings in Streamlit.
+        summary_df["Value"] = summary_df["Value"].astype(str)
         st.dataframe(summary_df, use_container_width=True, hide_index=True)
 
     if show_paths:
@@ -741,30 +871,50 @@ def render_sector_allocation(bundle: Dict[str, Any]) -> None:
 
     weights = np.array([latest_weights[s] for s in SECTOR_NAMES], dtype=float)
 
-    left, right = st.columns(2)
-    with left:
-        fig = go.Figure(
-            data=[
-                go.Pie(
-                    labels=SECTOR_NAMES,
-                    values=weights,
-                    hole=0.52,
-                    sort=False,
-                    marker=dict(colors=px.colors.qualitative.Safe),
-                )
-            ]
-        )
-        fig.update_layout(
-            template="plotly_white",
-            title="Current Sector Mix",
-            height=430,
-            margin=dict(l=10, r=10, t=45, b=10),
-        )
-        st.plotly_chart(fig, use_container_width=True)
+    sector_perf = evaluation.get("sector_performance", {})
+    perf = np.array([float(sector_perf.get(s, 0.0)) for s in SECTOR_NAMES], dtype=float)
 
-    with right:
-        sector_perf = evaluation.get("sector_performance", {})
-        perf = np.array([float(sector_perf.get(s, 0.0)) for s in SECTOR_NAMES], dtype=float)
+    top_idx = int(np.argmax(weights))
+    hhi = float(np.sum(weights ** 2))
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Top sector", SECTOR_NAMES[top_idx])
+    c2.metric("Top weight", f"{weights[top_idx] * 100:.2f}%")
+    c3.metric("Active sectors", int(np.sum(weights > 0.0)))
+    c4.metric("Concentration (HHI)", f"{hhi:.3f}")
+
+    tab1, tab2, tab3 = st.tabs(["Snapshot", "Performance", "Drift & Correlation"])
+
+    with tab1:
+        left, right = st.columns(2)
+        with left:
+            fig = go.Figure(
+                data=[
+                    go.Pie(
+                        labels=SECTOR_NAMES,
+                        values=weights,
+                        hole=0.52,
+                        sort=False,
+                        marker=dict(colors=px.colors.qualitative.Safe),
+                    )
+                ]
+            )
+            fig.update_layout(
+                template="plotly_white",
+                title="Current Sector Mix",
+                height=430,
+                margin=dict(l=10, r=10, t=45, b=10),
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        with right:
+            snap_df = pd.DataFrame(
+                {
+                    "Sector": SECTOR_NAMES,
+                    "Weight %": np.round(weights * 100.0, 2),
+                }
+            ).sort_values("Weight %", ascending=False)
+            st.dataframe(snap_df, use_container_width=True, hide_index=True)
+
+    with tab2:
         colors = ["#0f9d76" if x >= 0 else "#d64545" for x in perf]
         fig = go.Figure(
             data=[
@@ -786,58 +936,59 @@ def render_sector_allocation(bundle: Dict[str, Any]) -> None:
         )
         st.plotly_chart(fig, use_container_width=True)
 
-    macro_hist = [d for d in decisions if d.get("type") == "macro" and "sector_weights" in d]
-    if len(macro_hist) >= 2:
-        hist_rows = []
-        for item in macro_hist[-50:]:
-            row = {"step": int(item.get("step", 0))}
-            sector_weights = item.get("sector_weights", {})
-            for sector in SECTOR_NAMES:
-                row[sector] = float(sector_weights.get(sector, 0.0))
-            hist_rows.append(row)
-        hist_df = pd.DataFrame(hist_rows).sort_values("step")
+    with tab3:
+        macro_hist = [d for d in decisions if d.get("type") == "macro" and "sector_weights" in d]
+        if len(macro_hist) >= 2:
+            hist_rows = []
+            for item in macro_hist[-50:]:
+                row = {"step": int(item.get("step", 0))}
+                sector_weights = item.get("sector_weights", {})
+                for sector in SECTOR_NAMES:
+                    row[sector] = float(sector_weights.get(sector, 0.0))
+                hist_rows.append(row)
+            hist_df = pd.DataFrame(hist_rows).sort_values("step")
 
-        fig = go.Figure()
-        for sector in SECTOR_NAMES:
-            fig.add_trace(
-                go.Scatter(
-                    x=hist_df["step"],
-                    y=hist_df[sector] * 100.0,
-                    stackgroup="alloc",
-                    mode="lines",
-                    line=dict(width=0.7),
-                    name=sector,
+            fig = go.Figure()
+            for sector in SECTOR_NAMES:
+                fig.add_trace(
+                    go.Scatter(
+                        x=hist_df["step"],
+                        y=hist_df[sector] * 100.0,
+                        stackgroup="alloc",
+                        mode="lines",
+                        line=dict(width=0.7),
+                        name=sector,
+                    )
+                )
+            fig.update_layout(
+                template="plotly_white",
+                height=420,
+                margin=dict(l=10, r=10, t=40, b=10),
+                title="Allocation Drift Across Macro Decisions",
+                yaxis_title="Weight %",
+                xaxis_title="Decision step",
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
+            corr = hist_df[SECTOR_NAMES].corr()
+            heatmap = go.Figure(
+                data=go.Heatmap(
+                    z=corr.values,
+                    x=corr.columns,
+                    y=corr.index,
+                    colorscale="RdBu",
+                    zmid=0,
                 )
             )
-        fig.update_layout(
-            template="plotly_white",
-            height=420,
-            margin=dict(l=10, r=10, t=40, b=10),
-            title="Allocation Drift Across Macro Decisions",
-            yaxis_title="Weight %",
-            xaxis_title="Decision step",
-        )
-        st.plotly_chart(fig, use_container_width=True)
-
-        corr = hist_df[SECTOR_NAMES].corr()
-        heatmap = go.Figure(
-            data=go.Heatmap(
-                z=corr.values,
-                x=corr.columns,
-                y=corr.index,
-                colorscale="RdBu",
-                zmid=0,
+            heatmap.update_layout(
+                template="plotly_white",
+                height=470,
+                margin=dict(l=10, r=10, t=45, b=10),
+                title="Correlation of Allocation Changes",
             )
-        )
-        heatmap.update_layout(
-            template="plotly_white",
-            height=470,
-            margin=dict(l=10, r=10, t=45, b=10),
-            title="Correlation of Allocation Changes",
-        )
-        st.plotly_chart(heatmap, use_container_width=True)
-    else:
-        st.info("Need at least two macro decisions to show allocation history and correlation.")
+            st.plotly_chart(heatmap, use_container_width=True)
+        else:
+            st.info("Need at least two macro decisions to show allocation history and correlation.")
 
 
 def render_risk_monitor(bundle: Dict[str, Any]) -> None:
@@ -1046,19 +1197,41 @@ def render_stress_testing(bundle: Dict[str, Any]) -> None:
     results = tester.run_all(weights, capital)
     report = tester.generate_report(results)
 
-    c1, c2, c3 = st.columns(3)
+    worst_key = report["worst_scenario"]
+    worst_detail = results.get(worst_key, {})
+    dd_limit_pct = float(tester.cfg.get("portfolio", {}).get("max_drawdown_pct", 0.07)) * 100.0
+    worst_return_pct = float(worst_detail.get("portfolio_return", 0.0)) * 100.0
+    worst_desc = str(worst_detail.get("description", worst_key))
+
+    c1, c2, c3, c4 = st.columns(4)
     c1.metric("Scenarios passed", f"{report['scenarios_passed']}/{report['n_scenarios']}")
-    c2.metric("Worst case P&L", _format_inr(report["worst_case_pnl"]))
-    c3.metric("Worst scenario", report["worst_scenario"])
+    c2.metric("Worst case return", f"{worst_return_pct:.2f}%")
+    c3.metric("Worst case P&L", _format_inr(report["worst_case_pnl"]))
+    c4.metric("Worst scenario", worst_key.replace("_", " ").title())
+
+    st.caption(
+        f"Selected capital: INR {capital_cr:.1f} crore | Drawdown pass threshold: < {dd_limit_pct:.1f}%"
+    )
+    if report["scenarios_passed"] == 0:
+        st.warning(
+            "0/7 can be expected under severe historical shocks with a strict drawdown limit. "
+            "Review worst-case return and scenario details below."
+        )
+    with st.expander("Worst-scenario details", expanded=False):
+        st.write(worst_desc)
+        st.write(f"Max drawdown: {float(worst_detail.get('max_drawdown', 0.0)) * 100.0:.2f}%")
+        st.write(f"Expected loss contribution: {_format_inr(float(worst_detail.get('expected_loss', 0.0)))}")
 
     rows = []
     for scenario, detail in results.items():
         rows.append(
             {
-                "Scenario": scenario,
+                "Scenario": scenario.replace("_", " ").title(),
+                "Scenario key": scenario,
                 "Description": detail["description"],
                 "Return %": detail["portfolio_return"] * 100.0,
                 "P&L": detail["pnl"],
+                "P&L (Cr)": detail["pnl"] / 10_000_000.0,
                 "Max DD %": detail["max_drawdown"] * 100.0,
                 "Pass": "Yes" if detail["passes_drawdown_limit"] else "No",
             }
@@ -1069,9 +1242,9 @@ def render_stress_testing(bundle: Dict[str, Any]) -> None:
         data=[
             go.Bar(
                 x=df["Scenario"],
-                y=df["P&L"],
+                y=df["P&L (Cr)"],
                 marker_color=["#d64545" if x < 0 else "#0f9d76" for x in df["P&L"]],
-                text=[_format_inr(v) for v in df["P&L"]],
+                text=[f"{v:.2f} Cr" for v in df["P&L (Cr)"]],
                 textposition="outside",
             )
         ]
@@ -1081,10 +1254,24 @@ def render_stress_testing(bundle: Dict[str, Any]) -> None:
         height=360,
         margin=dict(l=10, r=10, t=35, b=10),
         title="Scenario-wise P&L",
-        yaxis_title="P&L (INR)",
+        yaxis_title="P&L (INR crore)",
     )
     st.plotly_chart(fig, use_container_width=True)
-    st.dataframe(df, use_container_width=True, hide_index=True)
+    st.dataframe(
+        df[
+            [
+                "Scenario",
+                "Scenario key",
+                "Return %",
+                "P&L (Cr)",
+                "Max DD %",
+                "Pass",
+                "Description",
+            ]
+        ],
+        use_container_width=True,
+        hide_index=True,
+    )
 
 
 def render_evaluation_results(bundle: Dict[str, Any]) -> None:
